@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Космо Кликер</title>
+<style>
+  :root {
+    --bg: #0E0A24;
+    --panel: #1B1340;
+    --panel-2: #261B57;
+    --text: #F2EEFF;
+    --muted: #A99FD6;
+    --accent: #FFB547;
+    --good: #5BE39B;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, Roboto, sans-serif; overflow: hidden; }
+  body { display: flex; flex-direction: column; }
+
+  #stars { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+  header, main, nav, #shop { position: relative; z-index: 1; }
+
+  header { padding: 18px 16px 6px; text-align: center; }
+  #coins { font-size: 40px; font-weight: 800; color: var(--accent); }
+  #rates { color: var(--muted); font-size: 14px; margin-top: 2px; }
+
+  main { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; }
+  #planet { width: min(62vw, 38vh); aspect-ratio: 1; border-radius: 50%; border: none; cursor: pointer;
+    background: radial-gradient(circle at 35% 30%, #FFE0A3 0%, #FFB547 35%, #E0751A 75%, #8A3B0A 100%);
+    box-shadow: 0 0 60px rgba(255,181,71,.35), inset -18px -18px 40px rgba(0,0,0,.35);
+    transition: transform .07s; position: relative; }
+  #planet:active { transform: scale(.93); }
+  #planet::after { content: ""; position: absolute; left: -18%; right: -18%; top: 44%; height: 12%;
+    border: 3px solid rgba(156,140,255,.8); border-radius: 50%; transform: rotate(-14deg); pointer-events: none; }
+
+  .pop { position: fixed; z-index: 5; pointer-events: none; font-weight: 800; font-size: 22px;
+    color: var(--accent); text-shadow: 0 2px 6px #000; animation: up .9s ease-out forwards; }
+  .pop.crit { color: #FF5CA8; font-size: 30px; }
+  @keyframes up { to { transform: translateY(-80px); opacity: 0; } }
+
+  nav { display: flex; gap: 8px; padding: 0 16px 8px; }
+  nav button { flex: 1; padding: 10px; border-radius: 12px; border: none; font-size: 15px; font-weight: 700;
+    background: var(--panel); color: var(--muted); }
+  nav button.on { background: var(--panel-2); color: var(--text); }
+
+  #shop { height: 38vh; overflow-y: auto; padding: 0 16px 16px; }
+  .item { display: flex; align-items: center; gap: 12px; background: var(--panel); border-radius: 14px;
+    padding: 12px; margin-bottom: 8px; border: 2px solid transparent; }
+  .item.can { border-color: rgba(91,227,155,.5); }
+  .item .ico { font-size: 28px; width: 36px; text-align: center; }
+  .item .info { flex: 1; min-width: 0; }
+  .item .name { font-weight: 700; }
+  .item .desc { color: var(--muted); font-size: 13px; }
+  .item .buy { border: none; border-radius: 10px; padding: 10px 12px; font-weight: 800; min-width: 84px;
+    background: var(--panel-2); color: var(--muted); font-size: 14px; }
+  .item.can .buy { background: var(--good); color: #0B2A18; }
+  .item.done { opacity: .5; }
+
+  #toast { position: fixed; left: 16px; right: 16px; top: 16px; z-index: 10; background: var(--panel-2);
+    border-radius: 12px; padding: 12px 14px; text-align: center; font-weight: 600;
+    transform: translateY(calc(-100% - 24px)); transition: transform .3s; }
+  #toast.show { transform: none; }
+</style>
+</head>
+<body>
+<canvas id="stars"></canvas>
+<div id="toast"></div>
+
+<header>
+  <div id="coins">0</div>
+  <div id="rates"></div>
+</header>
+
+<main><button id="planet" aria-label="Нажми на планету"></button></main>
+
+<nav>
+  <button data-tab="click" class="on">👆 Клик</button>
+  <button data-tab="auto">🤖 Авто</button>
+  <button data-tab="star">⭐ Звёзды</button>
+</nav>
+<div id="shop"></div>
+
+<script>
+const SAVE_KEY = "cosmo-clicker-v1";
+
+// Улучшения: tab — вкладка, click/auto — сколько даёт за уровень, cost — базовая цена
+const UPGRADES = [
+  { id: "finger",  tab: "click", ico: "👆", name: "Сильный палец", click: 1,   cost: 15 },
+  { id: "glove",   tab: "click", ico: "🧤", name: "Космоперчатка", click: 5,   cost: 200 },
+  { id: "hammer",  tab: "click", ico: "🔨", name: "Гравимолот",    click: 30,  cost: 3000 },
+  { id: "laser",   tab: "click", ico: "🔫", name: "Лазер",         click: 200, cost: 45000 },
+  { id: "crit",    tab: "click", ico: "🎯", name: "Меткость",      crit: 0.03, cost: 500, max: 10,
+    desc: "+3% шанс крита (x10)" },
+
+  { id: "drone",   tab: "auto",  ico: "🛸", name: "Дрон",          auto: 1,    cost: 50 },
+  { id: "rover",   tab: "auto",  ico: "🚙", name: "Луноход",       auto: 8,    cost: 600 },
+  { id: "station", tab: "auto",  ico: "🛰️", name: "Станция",       auto: 50,   cost: 7000 },
+  { id: "mine",    tab: "auto",  ico: "⛏️", name: "Шахта на астероиде", auto: 300, cost: 80000 },
+  { id: "dyson",   tab: "auto",  ico: "☀️", name: "Сфера Дайсона", auto: 2000, cost: 1000000 },
+];
+
+const fresh = () => ({ coins: 0, total: 0, stars: 0, lv: {}, clicks: 0, last: Date.now() });
+let S = load();
+
+function load() {
+  try {
+    const d = JSON.parse(localStorage.getItem(SAVE_KEY));
+    if (d && typeof d.coins === "number") return Object.assign(fresh(), d);
+  } catch (e) {}
+  return fresh();
+}
+function saveGame() {
+  S.last = Date.now();
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) {}
+}
+window.saveGame = saveGame;
+
+const lv = id => S.lv[id] || 0;
+const mult = () => 1 + S.stars * 0.1;          // каждая звезда = +10% ко всему
+const costOf = u => Math.ceil(u.cost * Math.pow(1.15, lv(u.id)));
+const perClick = () => (1 + UPGRADES.reduce((a, u) => a + (u.click || 0) * lv(u.id), 0)) * mult();
+const perSec = () => UPGRADES.reduce((a, u) => a + (u.auto || 0) * lv(u.id), 0) * mult();
+const critChance = () => UPGRADES.reduce((a, u) => a + (u.crit || 0) * lv(u.id), 0);
+const starsAvailable = () => Math.floor(Math.sqrt(S.total / 1e6));
+
+function fmt(n) {
+  if (n < 1000) return (Math.round(n * 10) / 10).toString();
+  const units = ["", "K", "M", "B", "T", "Qa", "Qi"];
+  let i = 0;
+  while (n >= 1000 && i < units.length - 1) { n /= 1000; i++; }
+  return n.toFixed(n < 10 ? 2 : n < 100 ? 1 : 0) + units[i];
+}
+
+function add(n) { S.coins += n; S.total += n; }
+
+// Доход, пока приложение было закрыто (до 8 часов, 50%)
+(function offline() {
+  const sec = Math.min((Date.now() - S.last) / 1000, 8 * 3600);
+  const gain = perSec() * sec * 0.5;
+  if (gain >= 1) { add(gain); setTimeout(() => toast("Пока тебя не было, дроны добыли " + fmt(gain) + " 🪙"), 400); }
+})();
+
+// ---------- клики ----------
+const planet = document.getElementById("planet");
+planet.addEventListener("pointerdown", e => {
+  let n = perClick();
+  const crit = Math.random() < critChance();
+  if (crit) n *= 10;
+  add(n);
+  S.clicks++;
+  pop(e.clientX, e.clientY, "+" + fmt(n), crit);
+  if (navigator.vibrate) navigator.vibrate(crit ? 40 : 8);
+  render();
+});
+
+function pop(x, y, text, crit) {
+  const el = document.createElement("div");
+  el.className = "pop" + (crit ? " crit" : "");
+  el.textContent = text;
+  el.style.left = (x - 20 + (Math.random() * 30 - 15)) + "px";
+  el.style.top = (y - 30) + "px";
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 900);
+}
+
+let toastTimer;
+function toast(t) {
+  const el = document.getElementById("toast");
+  el.textContent = t; el.classList.add("show");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove("show"), 3000);
+}
+
+// ---------- магазин ----------
+let tab = "click";
+document.querySelectorAll("nav button").forEach(b => b.addEventListener("click", () => {
+  tab = b.dataset.tab;
+  document.querySelectorAll("nav button").forEach(x => x.classList.toggle("on", x === b));
+  buildShop();
+}));
+
+const shop = document.getElementById("shop");
+
+function buildShop() {
+  shop.innerHTML = "";
+  if (tab === "star") {
+    const div = document.createElement("div");
+    div.className = "item";
+    div.id = "prestige";
+    div.innerHTML = `<div class="ico">⭐</div><div class="info"><div class="name">Новая галактика</div>
+      <div class="desc"></div></div><button class="buy"></button>`;
+    div.querySelector(".buy").addEventListener("click", prestige);
+    shop.appendChild(div);
+    const stats = document.createElement("div");
+    stats.className = "item";
+    stats.id = "stats";
+    shop.appendChild(stats);
+  } else {
+    UPGRADES.filter(u => u.tab === tab).forEach(u => {
+      const div = document.createElement("div");
+      div.className = "item";
+      div.dataset.id = u.id;
+      div.innerHTML = `<div class="ico">${u.ico}</div><div class="info"><div class="name"></div>
+        <div class="desc"></div></div><button class="buy"></button>`;
+      div.querySelector(".buy").addEventListener("click", () => buy(u));
+      shop.appendChild(div);
+    });
+  }
+  render();
+}
+
+function buy(u) {
+  if (u.max && lv(u.id) >= u.max) return;
+  const c = costOf(u);
+  if (S.coins < c) return;
+  S.coins -= c;
+  S.lv[u.id] = lv(u.id) + 1;
+  if (navigator.vibrate) navigator.vibrate(15);
+  render();
+  saveGame();
+}
+
+function prestige() {
+  const gain = starsAvailable() - S.stars;
+  if (gain <= 0) return;
+  if (!confirm(`Начать заново в новой галактике? Получишь ${gain} ⭐ (каждая звезда +10% к доходу навсегда).`)) return;
+  const stars = S.stars + gain;
+  S = fresh();
+  S.stars = stars;
+  saveGame();
+  buildShop();
+  toast("Добро пожаловать в новую галактику! ⭐ " + stars);
+}
+
+function render() {
+  document.getElementById("coins").textContent = fmt(S.coins) + " 🪙";
+  document.getElementById("rates").textContent =
+    `${fmt(perClick())} за клик · ${fmt(perSec())}/сек` + (S.stars ? ` · ⭐ ${S.stars}` : "");
+
+  if (tab === "star") {
+    const gain = starsAvailable() - S.stars;
+    const p = document.getElementById("prestige");
+    if (!p) return;
+    p.classList.toggle("can", gain > 0);
+    const nextAt = Math.pow(S.stars + 1, 2) * 1e6;
+    p.querySelector(".desc").textContent = gain > 0
+      ? `Сброс прогресса, но +${gain} ⭐ навсегда`
+      : `Следующая звезда при ${fmt(nextAt)} 🪙 за всё время (сейчас ${fmt(S.total)})`;
+    p.querySelector(".buy").textContent = gain > 0 ? "+" + gain + " ⭐" : "—";
+    document.getElementById("stats").innerHTML =
+      `<div class="ico">📊</div><div class="info"><div class="name">Статистика</div>
+       <div class="desc">Кликов: ${S.clicks} · Всего добыто: ${fmt(S.total)} 🪙 · Бонус звёзд: +${S.stars * 10}%</div></div>`;
+    return;
+  }
+
+  shop.querySelectorAll(".item").forEach(div => {
+    const u = UPGRADES.find(x => x.id === div.dataset.id);
+    const done = u.max && lv(u.id) >= u.max;
+    const c = costOf(u);
+    div.classList.toggle("can", !done && S.coins >= c);
+    div.classList.toggle("done", !!done);
+    div.querySelector(".name").textContent = `${u.name} · ур. ${lv(u.id)}`;
+    div.querySelector(".desc").textContent = u.desc ||
+      (u.click ? `+${fmt(u.click * mult())} за клик` : `+${fmt(u.auto * mult())} в секунду`);
+    div.querySelector(".buy").textContent = done ? "МАКС" : fmt(c) + " 🪙";
+  });
+}
+
+// ---------- игровой цикл ----------
+let prev = performance.now();
+setInterval(() => {
+  const now = performance.now();
+  add(perSec() * (now - prev) / 1000);
+  prev = now;
+  render();
+}, 100);
+setInterval(saveGame, 5000);
+document.addEventListener("visibilitychange", () => { if (document.hidden) saveGame(); });
+
+// ---------- звёздный фон ----------
+(function stars() {
+  const c = document.getElementById("stars"), g = c.getContext("2d");
+  let pts = [];
+  function resize() {
+    c.width = innerWidth; c.height = innerHeight;
+    pts = Array.from({ length: 90 }, () => ({ x: Math.random() * c.width, y: Math.random() * c.height,
+      r: Math.random() * 1.5 + .3, s: Math.random() * .3 + .05 }));
+  }
+  resize(); addEventListener("resize", resize);
+  (function frame() {
+    g.clearRect(0, 0, c.width, c.height);
+    g.fillStyle = "#fff";
+    for (const p of pts) {
+      p.y += p.s; if (p.y > c.height) p.y = 0;
+      g.globalAlpha = .4 + p.r / 3;
+      g.beginPath(); g.arc(p.x, p.y, p.r, 0, 7); g.fill();
+    }
+    requestAnimationFrame(frame);
+  })();
+})();
+
+buildShop();
+</script>
+</body>
+</html>
