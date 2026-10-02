@@ -1,0 +1,17 @@
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+captures/
+.kotlin/
+# офлайн-модель Vosk скачивается при сборке (см. app/build.gradle.kts)
+app/src/main/assets/vosk-model-*.zip*
+# эксперимент с Vosk: тяжёлые данные не храним
+tools/vosk-experiment/venv/
+tools/vosk-experiment/models/
+tools/vosk-experiment/voices/
+tools/vosk-experiment/exp/audio/
+tools/vosk-experiment/exp/events/
+tools/vosk-experiment/exp/results.tsv
+tools/vosk-experiment/exp/__pycache__/

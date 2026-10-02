@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Трекер чтения</string>
+    <string name="toc">Оглавление</string>
+    <string name="file">Файл</string>
+    <string name="settings">Настройки</string>
+    <string name="start">Старт</string>
+    <string name="pause">Пауза</string>
+    <string name="font_smaller">A−</string>
+    <string name="font_bigger">A+</string>
+    <string name="status_preparing_model">Подготовка модели распознавания (один раз)… %1$d%%</string>
+    <string name="status_loading_text">Загрузка текста…</string>
+    <string name="status_ready">Нажмите «Старт» и читайте вслух</string>
+    <string name="status_starting">Запуск микрофона…</string>
+    <string name="status_listening">Слушаю…</string>
+    <string name="status_searching">Слушаю… (ищу ваше место в тексте; можно удержать слово пальцем)</string>
+    <string name="status_paused">Пауза</string>
+    <string name="status_error">Ошибка: %1$s</string>
+    <string name="status_finished">Текст дочитан до конца</string>
+    <string name="heard_format">Слышу: %1$s</string>
+    <string name="stats_format">Прочитано: %1$d сл. · %2$d сл/мин · %3$s</string>
+    <string name="open_file">Открыть файл (.txt, .html, .mht)…</string>
+    <string name="restore_default">Вернуть «Одиссею» (текст по умолчанию)</string>
+    <string name="seek_here">Начинаю отсюда: «%1$s»</string>
+    <string name="file_empty">В файле не найден текст</string>
+    <string name="file_error">Не удалось открыть файл: %1$s</string>
+    <string name="file_opened">Открыто: %1$s</string>
+    <string name="permission_needed">Для распознавания речи нужен доступ к микрофону. Разрешите его в настройках приложения.</string>
+    <string name="settings_theme">Тема</string>
+    <string name="theme_system">Как в системе</string>
+    <string name="theme_light">Светлая</string>
+    <string name="theme_dark">Тёмная</string>
+    <string name="settings_sensitivity">Чувствительность микрофона: %1$d%%</string>
+    <string name="settings_sensitivity_hint">Выше — лучше слышит тихую речь, но усиливает и шум.</string>
+    <string name="settings_restrict">Подсказывать распознавателю слова из текста вокруг позиции</string>
+    <string name="settings_reset_stats">Сбросить статистику</string>
+    <string name="close">Закрыть</string>
+    <string name="toc_title">Оглавление</string>
+    <string name="file_title">Файл</string>
+    <string name="no_text">Текст не загружен</string>
+</resources>

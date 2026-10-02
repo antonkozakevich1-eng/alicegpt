@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="light_bg">#FFFAF7F0</color>
+    <color name="light_text">#FF1B1B1B</color>
+    <color name="light_dim">#FFA8A29A</color>
+    <color name="light_subtle">#FF6B6B6B</color>
+    <color name="light_hl_bg">#FFFFD54F</color>
+    <color name="light_hl_text">#FF000000</color>
+    <color name="light_marker">#FF9E9E9E</color>
+    <color name="light_heading">#FF6D4C41</color>
+    <color name="light_panel">#FFEFE9DD</color>
+    <color name="light_accent">#FF2E5BFF</color>
+    <color name="light_on_accent">#FFFFFFFF</color>
+
+    <color name="dark_bg">#FF121212</color>
+    <color name="dark_text">#FFE6E1D8</color>
+    <color name="dark_dim">#FF5C5A57</color>
+    <color name="dark_subtle">#FF9A9A9A</color>
+    <color name="dark_hl_bg">#FFFFB300</color>
+    <color name="dark_hl_text">#FF000000</color>
+    <color name="dark_marker">#FF6E6E6E</color>
+    <color name="dark_heading">#FFD7B98E</color>
+    <color name="dark_panel">#FF1E1E1E</color>
+    <color name="dark_accent">#FF7C9DFF</color>
+    <color name="dark_on_accent">#FF0B1020</color>
+
+    <color name="icon_bg">#FF1F2A44</color>
+</resources>
