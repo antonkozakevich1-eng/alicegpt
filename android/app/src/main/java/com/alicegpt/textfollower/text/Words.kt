@@ -9,12 +9,17 @@ object Words {
     private const val UNKNOWN = "[unk]"
 
     /** Нижний регистр, ё→е, без знаков ударения. */
-    fun normalize(word: String): String {
+    fun normalize(word: String): String = normalize(word, keepYo = false)
+
+    /** Нижний регистр без знаков ударения, «ё» остаётся: так слово пишут в тексте и произносит распознаватель. */
+    fun spelled(word: String): String = normalize(word, keepYo = true)
+
+    private fun normalize(word: String, keepYo: Boolean): String {
         val composed = Normalizer.normalize(word, Normalizer.Form.NFC).lowercase(Locale.ROOT)
         val sb = StringBuilder(composed.length)
         for (c in composed) {
             when {
-                c == 'ё' -> sb.append('е')
+                c == 'ё' -> sb.append(if (keepYo) 'ё' else 'е')
                 isMark(c) -> Unit
                 else -> sb.append(c)
             }

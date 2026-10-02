@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="?attr/markerColor">
+<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="?attr/strokeColor">
     <item>
         <shape android:shape="rectangle">
             <solid android:color="?attr/panelBg" />
-            <stroke android:width="1dp" android:color="?attr/markerColor" />
+            <stroke android:width="1dp" android:color="?attr/strokeColor" />
             <corners android:radius="12dp" />
         </shape>
     </item>

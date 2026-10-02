@@ -12,11 +12,40 @@
         <item name="panelBg">@color/light_panel</item>
         <item name="accentColor">@color/light_accent</item>
         <item name="onAccent">@color/light_on_accent</item>
+        <item name="strokeColor">@color/light_stroke</item>
+        <item name="goodColor">@color/light_good</item>
+        <item name="warnColor">@color/light_warn</item>
+        <item name="badColor">@color/light_bad</item>
         <item name="android:windowBackground">@color/light_bg</item>
         <item name="android:statusBarColor">@color/light_bg</item>
-        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:colorBackground">@color/light_bg</item>
         <item name="android:textColorPrimary">@color/light_text</item>
         <item name="android:colorAccent">@color/light_accent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+
+    <style name="Theme.App.Sepia" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="appBg">@color/sepia_bg</item>
+        <item name="textMain">@color/sepia_text</item>
+        <item name="textDim">@color/sepia_dim</item>
+        <item name="textSubtle">@color/sepia_subtle</item>
+        <item name="hlBg">@color/sepia_hl_bg</item>
+        <item name="hlText">@color/sepia_hl_text</item>
+        <item name="markerColor">@color/sepia_marker</item>
+        <item name="headingColor">@color/sepia_heading</item>
+        <item name="panelBg">@color/sepia_panel</item>
+        <item name="accentColor">@color/sepia_accent</item>
+        <item name="onAccent">@color/sepia_on_accent</item>
+        <item name="strokeColor">@color/sepia_stroke</item>
+        <item name="goodColor">@color/light_good</item>
+        <item name="warnColor">@color/light_warn</item>
+        <item name="badColor">@color/light_bad</item>
+        <item name="android:windowBackground">@color/sepia_bg</item>
+        <item name="android:statusBarColor">@color/sepia_bg</item>
+        <item name="android:colorBackground">@color/sepia_bg</item>
+        <item name="android:textColorPrimary">@color/sepia_text</item>
+        <item name="android:colorAccent">@color/sepia_accent</item>
+        <item name="android:windowLightStatusBar">true</item>
     </style>
 
     <style name="Theme.App.Dark" parent="android:Theme.Material.NoActionBar">
@@ -31,9 +60,37 @@
         <item name="panelBg">@color/dark_panel</item>
         <item name="accentColor">@color/dark_accent</item>
         <item name="onAccent">@color/dark_on_accent</item>
+        <item name="strokeColor">@color/dark_stroke</item>
+        <item name="goodColor">@color/dark_good</item>
+        <item name="warnColor">@color/dark_warn</item>
+        <item name="badColor">@color/dark_bad</item>
         <item name="android:windowBackground">@color/dark_bg</item>
         <item name="android:statusBarColor">@color/dark_bg</item>
+        <item name="android:colorBackground">@color/dark_bg</item>
         <item name="android:textColorPrimary">@color/dark_text</item>
+        <item name="android:colorAccent">@color/dark_accent</item>
+    </style>
+
+    <style name="Theme.App.Black" parent="android:Theme.Material.NoActionBar">
+        <item name="appBg">@color/black_bg</item>
+        <item name="textMain">@color/black_text</item>
+        <item name="textDim">@color/black_dim</item>
+        <item name="textSubtle">@color/black_subtle</item>
+        <item name="hlBg">@color/dark_hl_bg</item>
+        <item name="hlText">@color/dark_hl_text</item>
+        <item name="markerColor">@color/dark_marker</item>
+        <item name="headingColor">@color/dark_heading</item>
+        <item name="panelBg">@color/black_panel</item>
+        <item name="accentColor">@color/dark_accent</item>
+        <item name="onAccent">@color/dark_on_accent</item>
+        <item name="strokeColor">@color/black_stroke</item>
+        <item name="goodColor">@color/dark_good</item>
+        <item name="warnColor">@color/dark_warn</item>
+        <item name="badColor">@color/dark_bad</item>
+        <item name="android:windowBackground">@color/black_bg</item>
+        <item name="android:statusBarColor">@color/black_bg</item>
+        <item name="android:colorBackground">@color/black_bg</item>
+        <item name="android:textColorPrimary">@color/black_text</item>
         <item name="android:colorAccent">@color/dark_accent</item>
     </style>
 
@@ -49,11 +106,20 @@
         <item name="android:stateListAnimator">@null</item>
     </style>
 
-    <style name="BtnPrimary" parent="Btn">
-        <item name="android:background">@drawable/bg_btn_primary</item>
-        <item name="android:textColor">?attr/onAccent</item>
-        <item name="android:textSize">17sp</item>
-        <item name="android:minHeight">52dp</item>
+    <style name="IconBtn">
+        <item name="android:layout_width">44dp</item>
+        <item name="android:layout_height">44dp</item>
+        <item name="android:background">@drawable/bg_icon_btn</item>
+        <item name="android:scaleType">center</item>
+        <item name="android:tint">?attr/textSubtle</item>
+    </style>
+
+    <style name="SectionTitle">
+        <item name="android:textSize">12sp</item>
         <item name="android:textStyle">bold</item>
+        <item name="android:textColor">?attr/accentColor</item>
+        <item name="android:letterSpacing">0.08</item>
+        <item name="android:paddingTop">18dp</item>
+        <item name="android:paddingBottom">6dp</item>
     </style>
 </resources>

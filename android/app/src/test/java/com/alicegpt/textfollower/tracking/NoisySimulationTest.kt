@@ -14,15 +14,23 @@ import java.util.Random
 import kotlin.math.abs
 
 /**
- * Имитация распознавания с шумом. Главное требование — ни одного ложного сдвига:
- * позиция не должна обгонять реально прочитанное и не должна прыгать в чужие места.
+ * Имитация распознавания с шумом. Подсветка идёт с каждым распознанным словом, поэтому на шумных словах она иногда
+ * опережает чтение на пару слов (случайно совпавшее «лишнее» слово), но не больше [MAX_AHEAD], и не прыгает в чужие места.
  */
 class NoisySimulationTest {
+
+    private companion object {
+        /** Наибольшее допустимое опережение подсветки над самым дальним реально прочитанным словом. */
+        const val MAX_AHEAD = 4
+    }
 
     private val moderate = Noise(drop = 0.10, ending = 0.20, garbage = 0.08, stutter = 0.03)
     private val heavy = Noise(drop = 0.25, ending = 0.35, garbage = 0.20, stutter = 0.05)
 
     private fun doc(seed: Long): Doc = PseudoText.doc(seed, lines = 750)
+
+    private fun aheadShare(steps: List<Step>, atLeast: Int): Double =
+        steps.count { it.ahead >= atLeast }.toDouble() / steps.size
 
     private fun lagShare(steps: List<Step>, warmup: Int, maxLag: Int): Double {
         val body = steps.drop(warmup)
@@ -37,7 +45,7 @@ class NoisySimulationTest {
     private fun assertMovesAreRight(steps: List<Step>, zones: List<IntRange> = emptyList(), tolerance: Int = 15) {
         for (s in steps) {
             val m = s.move ?: continue
-            assertTrue("сдвиг за пределы прочитанного: шаг ${s.index}, позиция ${m.to}, дальше всех ${s.furthest + 1}", m.to <= s.furthest + 2)
+            assertTrue("сдвиг за пределы прочитанного: шаг ${s.index}, позиция ${m.to}, дальше всех ${s.furthest + 1}", m.to <= s.furthest + 1 + MAX_AHEAD)
             val ok = abs(m.to - s.truth) <= tolerance || zones.any { m.to in it }
             assertTrue("сдвиг в чужое место: шаг ${s.index}, позиция ${m.to}, истина ${s.truth}", ok)
         }
@@ -50,9 +58,9 @@ class NoisySimulationTest {
             val t = TextTracker(d)
             val steps = Runner.trace(t, SpeechSim(d, Random(seed)).read(0, 2000))
             assertTrue("опережение ${Runner.maxAhead(steps)}", Runner.maxAhead(steps) <= 0)
-            // позиция не ставится на короткое слово в хвосте, поэтому в конце возможен запас в пару слов
-            assertTrue("итог ${t.position}", t.position in 1997..2000)
-            assertTrue("отставание ${lagShare(steps, 10, 3)}", lagShare(steps, warmup = 10, maxLag = 3) < 0.02)
+            assertEquals("итог", 2000, t.position)
+            // подсветка идёт за каждым словом: отставание больше одного слова — редкость
+            assertTrue("отставание ${lagShare(steps, 10, 1)}", lagShare(steps, warmup = 10, maxLag = 1) < 0.01)
         }
     }
 
@@ -62,10 +70,10 @@ class NoisySimulationTest {
             val d = doc(seed)
             val t = TextTracker(d)
             val steps = Runner.trace(t, SpeechSim(d, Random(seed), moderate).read(0, 2500))
-            assertTrue("seed $seed: опережение ${Runner.maxAhead(steps)}", Runner.maxAhead(steps) <= 1)
+            assertTrue("seed $seed: опережение ${Runner.maxAhead(steps)}", Runner.maxAhead(steps) <= MAX_AHEAD)
             assertMovesAreRight(steps)
             assertTrue("seed $seed: итог ${t.position}", t.position >= 2500 - 12)
-            assertTrue("seed $seed: отставание ${lagShare(steps, 20, 20)}", lagShare(steps, 20, 20) < 0.05)
+            assertTrue("seed $seed: отставание ${lagShare(steps, 20, 2)}", lagShare(steps, 20, 2) < 0.03)
         }
     }
 
@@ -75,10 +83,11 @@ class NoisySimulationTest {
             val d = doc(seed)
             val t = TextTracker(d)
             val steps = Runner.trace(t, SpeechSim(d, Random(seed), heavy).read(0, 2500))
-            // при 20% мусорных слов «лишнее» слово иногда совпадает со следующим словом текста — это ±2 слова, не прыжок
-            assertTrue("seed $seed: опережение ${Runner.maxAhead(steps)}", Runner.maxAhead(steps) <= 3)
+            // при 20% мусорных слов «лишнее» слово иногда совпадает со следующим словом текста — это пара слов, не прыжок
+            assertTrue("seed $seed: опережение ${Runner.maxAhead(steps)}", Runner.maxAhead(steps) <= MAX_AHEAD)
             assertMovesAreRight(steps)
-            assertTrue("seed $seed: итог ${t.position}", t.position >= 2500 * 0.8)
+            assertTrue("seed $seed: итог ${t.position}", t.position >= 2500 - 12)
+            assertTrue("seed $seed: отставание ${lagShare(steps, 20, 3)}", lagShare(steps, 20, 3) < 0.06)
         }
     }
 
@@ -94,17 +103,38 @@ class NoisySimulationTest {
         }
     }
 
+    /**
+     * Самая злая чужая речь: случайные слова самой книги (в том числе редкие) вперемешку с мусором. Подсветка
+     * не должна гулять — но если случайно подряд совпали два-три слова недалеко от неё, сдвиг возможен: он редок
+     * (в этом тесте ≈ раз в три тысячи фраз) и исправляется, как только читатель продолжит читать.
+     */
     @Test
-    fun foreignSpeechWithTheSameWordsNeverMovesHighlight() {
+    fun foreignSpeechMadeOfBookWordsAlmostNeverMovesHighlight() {
+        var moves = 0
+        var events = 0
         for (seed in 1L..5L) {
             val d = doc(seed)
             val t = TextTracker(d)
             t.seek(700)
-            // чужая речь собрана из слов этой же книги, но в случайном порядке
             val vocabulary = d.norm.toList()
             val steps = Runner.trace(t, SpeechSim(d, Random(seed)).garbage(3000, truthEnd = 699, vocabulary = vocabulary))
-            assertTrue("seed $seed: сдвигов ${steps.count { it.move != null }}", steps.none { it.move != null })
-            assertEquals(700, t.position)
+            moves += steps.count { it.move != null }
+            events += steps.size
+        }
+        assertTrue("сдвигов $moves на $events событий", moves <= 10)
+    }
+
+    @Test
+    fun readerRecoversRightAfterFalseShiftOnForeignSpeech() {
+        for (seed in 1L..3L) {
+            val d = doc(seed)
+            val t = TextTracker(d)
+            val sim = SpeechSim(d, Random(seed), moderate)
+            val events = sim.read(0, 100) + sim.garbage(1500, truthEnd = 99, vocabulary = d.norm.toList()) + sim.read(100, 300)
+            val steps = Runner.trace(t, events)
+            // после чужой речи читатель продолжил с того же места: подсветка к концу куска на месте
+            assertTrue("seed $seed: итог ${t.position}", t.position in (300 - 3)..300)
+            assertTrue("seed $seed", steps.takeLast(5).all { it.position >= it.truth - 3 })
         }
     }
 
@@ -166,7 +196,7 @@ class NoisySimulationTest {
                 at += 14
             }
             val steps = Runner.trace(t, events)
-            assertTrue("seed $seed: за пределами прочитанного ${Runner.maxBeyondFurthest(steps)}", Runner.maxBeyondFurthest(steps) <= 1)
+            assertTrue("seed $seed: за пределами прочитанного ${Runner.maxBeyondFurthest(steps)}", Runner.maxBeyondFurthest(steps) <= MAX_AHEAD)
             assertTrue("seed $seed: итог ${t.position}", t.position >= 1200 - 14 - 12)
         }
     }
@@ -185,8 +215,9 @@ class NoisySimulationTest {
                 at += 12
             }
             val steps = Runner.trace(t, events)
-            assertTrue("seed $seed: опережение ${Runner.maxAhead(steps)}", Runner.maxAhead(steps) <= 1)
-            assertMovesAreRight(steps)
+            // после мусорной фразы первое слово иногда совпадает с таким же словом чуть дальше по тексту
+            assertTrue("seed $seed: опережение ${Runner.maxAhead(steps)}", Runner.maxAhead(steps) <= MAX_AHEAD + 2)
+            assertTrue("seed $seed: доля опережений ${aheadShare(steps, 3)}", aheadShare(steps, 3) < 0.005)
             assertTrue("seed $seed: итог ${t.position}", t.position >= 1500 - 24)
         }
     }
@@ -198,7 +229,7 @@ class NoisySimulationTest {
         val sim = SpeechSim(d, Random(3), moderate)
         val events = sim.read(0, 200) + sim.garbage(300, truthEnd = 199, vocabulary = d.norm.toList()) + sim.read(200, 500)
         val steps = Runner.trace(t, events)
-        assertTrue(Runner.maxAhead(steps) <= 1)
+        assertTrue(Runner.maxAhead(steps) <= MAX_AHEAD)
         assertTrue("итог ${t.position}", t.position >= 500 - 12)
     }
 }

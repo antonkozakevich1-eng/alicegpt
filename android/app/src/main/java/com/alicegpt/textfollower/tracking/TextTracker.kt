@@ -4,54 +4,270 @@ import com.alicegpt.textfollower.text.Doc
 import com.alicegpt.textfollower.text.Words
 import kotlin.math.abs
 import kotlin.math.max
-import kotlin.math.min
+
+/** Параметры трекера. Подобраны по записям распознавания (см. `tools/vosk-experiment`). */
+@Suppress("ArrayInDataObject")
+data class TrackerConfig(
+    /** Вероятность, что распознанное слово — это (почти) то, что читают: средняя точность распознавателя. */
+    val rho: Double = 0.6,
+    /** Читатель за одно распознанное слово сдвигается на 0 (повтор), 1, 2, 3 слова. */
+    val advance: DoubleArray = doubleArrayOf(0.0, 0.80, 0.10, 0.03),
+    /** Читает → пауза/мусор/чужая речь. */
+    val pStop: Double = 0.04,
+    /** Пауза → снова читает. */
+    val pStart: Double = 0.05,
+    /** Откат на 1..8 слов назад (повтор слов). */
+    val pBack: Double = 0.01,
+    /** Пропуск вперёд на 4..40 слов. */
+    val pSkip: Double = 0.01,
+    /** Доля возвращения из паузы, уходящая на перечитывание назад (до 40 слов). */
+    val pReread: Double = 0.05,
+    /** Прыжок в любое место текста. */
+    val pJump: Double = 3e-4,
+    /** Нижняя граница «фоновой» вероятности слова: ограничивает силу очень редких слов. */
+    val backgroundFloor: Double = 0.0,
+    /** Состояния с вероятностью ниже порога отбрасываются; в пучке не больше [beam] состояний. */
+    val prune: Double = 1e-7,
+    val beam: Int = 150,
+    /** Слова, у которых больше столько вхождений в текст, не порождают пропуски/перескоки. */
+    val wideCap: Int = 600,
+    /** Вероятность «читает» в точке, куда читателя поставили вручную. */
+    val seekOn: Double = 0.5,
+
+    // Шлюз перед сдвигом подсветки: сколько из последних 8 распознанных слов подтвердили новое место
+    // и какая доля вероятности (вокруг лучшей позиции) должна быть на нём.
+    val needNear: Int = 2,
+    val needMid: Int = 2,
+    val needFar: Int = 3,
+    val needJump: Int = 4,
+    val needHuge: Int = 6,
+    val tauMove: Double = 0.5,
+    val tauMid: Double = 0.8,
+    val tauFar: Double = 0.97,
+    /** Откаты не дальше стольких слов считаются «передумал распознаватель» и игнорируются. */
+    val jitter: Int = 2,
+    /** Границы дальности сдвига, слов. */
+    val farAfter: Int = 60,
+    val hugeAfter: Int = 200,
+
+    // Режим поиска места: далёкий перескок принимается по меньшему числу совпавших слов и при меньшей уверенности.
+    /** Подсветка «потеряна», когда вероятность чтения рядом с ней ниже [lockThreshold]… */
+    val lockThreshold: Double = 0.25,
+    /** …и накопилось столько распознанных слов без подтверждения места: тогда включается поиск. */
+    val lostWords: Int = 4,
+    val searchNeedFar: Int = 3,
+    val searchNeedJump: Int = 3,
+    val searchNeedHuge: Int = 4,
+    val searchTauFar: Double = 0.97,
+    val searchJump: Double = 3e-3,
+) {
+    /**
+     * Режим поиска места: читатель ушёл (перескочил или потерялся), нужно быстро найти, где он. Далёкий перескок
+     * принимается по меньшему числу совпавших слов; на записях это находит место за ≈2 с без ложных срабатываний
+     * на чужой речи и шуме.
+     */
+    fun searching() = copy(
+        needFar = minOf(needFar, searchNeedFar), needJump = minOf(needJump, searchNeedJump),
+        needHuge = minOf(needHuge, searchNeedHuge), tauFar = minOf(tauFar, searchTauFar), pJump = maxOf(pJump, searchJump),
+    )
+
+    companion object {
+        /** Для нейросетевого движка. */
+        val NEURAL = TrackerConfig()
+
+        /**
+         * Для Vosk с ограничением словаря: распознаватель вынужден подбирать слова из окна, поэтому чужая речь
+         * и чтение другого места чаще случайно «складываются» в слова текста — шлюз строже.
+         */
+        val VOSK = TrackerConfig(needNear = 3, pJump = 1e-5, backgroundFloor = 0.003, needHuge = 8)
+    }
+}
 
 /**
- * Определяет по потоку распознанной речи, где в тексте читают, и двигает позицию
- * **только при уверенности**.
+ * Определяет по потоку распознанной речи, где в тексте читают, и двигает подсветку **только при уверенности**.
  *
- * Правила:
- *  - одно слово ничего не значит: позиция подтверждается, когда подряд совпали не меньше
- *    [MIN_MATCHED] последних распознанных слов с текстом (нечётко: прощаем неверные окончания),
- *    средняя похожесть совпавших слов не ниже [MIN_AVG_SIM], допускается один пропуск или одно лишнее слово;
- *  - сначала ищем рядом с текущей позицией ([AHEAD] слов вперёд и [BACK] назад);
- *  - далёкий прыжок (в другое место текста) — только при совпадении не менее [FAR_MIN_MATCHED] слов подряд;
- *  - мусор, кашель, паузы и чужая речь не дают подряд совпавших слов, и подсветка стоит на месте.
+ * Это байесовский фильтр по позиции (скрытая марковская модель): храним распределение вероятностей «читатель
+ * прочитал столько-то слов» и режим «читает / пауза». Каждое распознанное слово обновляет распределение:
+ *  - совпало со словом текста (нечётко, с прощением окончаний) — вероятность этой позиции растёт тем сильнее,
+ *    чем реже слово встречается в тексте: редкое слово — почти доказательство, «и» — почти ничего;
+ *  - не совпало — вероятность смещается в состояние «пауза/мусор», подсветка стоит на месте.
+ * Поэтому подсветка идёт с каждым распознанным словом, а не ждёт нескольких подряд, но одно слово по-прежнему
+ * ничего не значит: сдвиг разрешается только после нескольких подтверждений ([TrackerConfig.needNear] и т. д.),
+ * чем дальше сдвиг, тем больше нужно подтверждающих слов и тем увереннее должно быть распределение.
  *
- * Распознанные слова текущей фразы дописываются к хвосту предыдущих (после паузы позиция
- * подтверждается сразу, не дожидаясь четырёх новых слов).
+ * Слова новой фразы дописываются к тому, что было до паузы, поэтому после паузы подсветка продолжается сразу.
  *
  * Не потокобезопасен.
  */
-class TextTracker(val doc: Doc) {
+class TextTracker(val doc: Doc, private val baseConfig: TrackerConfig = TrackerConfig.NEURAL) {
 
-    /** Результат: позиция сдвинулась с [from] на [to] ([far] — далёкий прыжок). */
-    class Move(val from: Int, val to: Int, val far: Boolean, val matched: Int) {
+    /** Результат: подсветка сдвинулась с [from] на [to]; [matched] — сколько из последних 8 слов подтвердили место. */
+    class Move(val from: Int, val to: Int, val matched: Int) {
         val delta: Int get() = to - from
+
+        /** Перескок в другое место, а не обычное чтение. */
+        val far: Boolean get() = abs(delta) > FAR_DELTA
     }
 
+    private val n = doc.size
     private val norm: Array<String> = doc.norm
-    private val n = norm.size
     private val matcher = WordMatcher()
+    private val searchConfig = baseConfig.searching()
+    private var cfg = baseConfig
+
+    /**
+     * Режим поиска места (см. [TrackerConfig.searching]). Включается сам, когда подсветка потеряла уверенность и
+     * распознано [TrackerConfig.lostWords] слов без подтверждения места (читатель ушёл), и выключается, как только место найдено.
+     */
+    var searchMode: Boolean = false
+        private set(value) {
+            field = value
+            cfg = if (value) searchConfig else baseConfig
+        }
+
+    /** Сбросить режим поиска (например, когда читатель начал заново или поставил место вручную). */
+    fun stopSearching() {
+        searchMode = false
+        resetLostCounters()
+    }
+
+    // «Потерялись»: распознанные слова без подтверждения места.
+    private var wordsSinceMove = 0   // слов в завершённых фразах
+    private var phraseWords = 0      // слов в текущей фразе
+    private var phraseAtMove = 0     // сколько из них было к моменту последнего подтверждения
+
+    private fun resetLostCounters() {
+        wordsSinceMove = 0
+        phraseWords = 0
+        phraseAtMove = 0
+    }
+
+    private fun unconfirmedWords() = wordsSinceMove + max(0, phraseWords - phraseAtMove)
+
+    /**
+     * Вероятность того, что читатель действительно читает рядом с подсветкой (±3 слова), 0..1.
+     * Падает, когда идёт мусор, кашель или чужая речь, и растёт, когда слова совпадают с текстом.
+     */
+    var confidence: Double = baseConfig.seekOn
+        private set
+
+    /** Подсветка стоит уверенно (а не «потерялась»). */
+    val locked: Boolean get() = confidence >= baseConfig.lockThreshold
 
     /** Индекс слова, которое читатель должен произнести следующим (0..doc.size). */
     var position: Int = 0
         private set
 
-    /** Слова законченных фраз; нужны, чтобы после паузы не ждать четыре новых слова. */
-    private val committed = ArrayList<String>()
+    // ---------- индексы текста ----------
 
-    private val stemIndex: HashMap<String, IntArray> by lazy { buildStemIndex() }
+    private val posOf: HashMap<String, IntArray> by lazy {
+        val tmp = HashMap<String, ArrayList<Int>>()
+        for (i in 0 until n) tmp.getOrPut(norm[i]) { ArrayList() }.add(i)
+        val out = HashMap<String, IntArray>(tmp.size * 2)
+        for ((w, l) in tmp) out[w] = l.toIntArray()
+        out
+    }
+    private val vocab: Array<String> by lazy { posOf.keys.sorted().toTypedArray() }
+    private val bucket: HashMap<String, ArrayList<String>> by lazy {
+        val b = HashMap<String, ArrayList<String>>()
+        for (w in vocab) b.getOrPut(w.take(3)) { ArrayList() }.add(w)
+        b
+    }
+
+    /** Слова словаря, похожие на распознанное слово, с похожестью, и сколько всего таких мест в тексте. */
+    private class Similar(val sims: HashMap<String, Double>, val count: Int)
+
+    private val similarCache = HashMap<String, Similar>()
+
+    private fun similar(r: String, prefix: Boolean): Similar {
+        val key = if (prefix) "$r\u0001" else r
+        similarCache[key]?.let { return it }
+        val sims = HashMap<String, Double>()
+        bucket[r.take(3)]?.let { list ->
+            for (w in list) {
+                val s = matcher.similarity(r, w)
+                if (s > 0.0) sims[w] = s
+            }
+        }
+        if (posOf.containsKey(r)) sims[r] = 1.0
+        if (prefix && r.length >= 3) {
+            // последнее слово незаконченной фразы может быть ещё не дослушано: «верн» → «верное»
+            var k = lowerBound(r)
+            while (k < vocab.size && vocab[k].startsWith(r)) {
+                sims[vocab[k]] = max(sims[vocab[k]] ?: 0.0, PREFIX_SIM)
+                k++
+            }
+        }
+        var cnt = 0
+        for (w in sims.keys) cnt += posOf[w]!!.size
+        if (similarCache.size > SIMILAR_CACHE_MAX) similarCache.clear()
+        return Similar(sims, cnt).also { similarCache[key] = it }
+    }
+
+    private fun lowerBound(prefix: String): Int {
+        var lo = 0
+        var hi = vocab.size
+        while (lo < hi) {
+            val mid = (lo + hi) ushr 1
+            if (vocab[mid] < prefix) lo = mid + 1 else hi = mid
+        }
+        return lo
+    }
+
+    /** Подготовить индексы заранее (на длинных текстах это заметно). */
+    fun warmUp() {
+        posOf.size
+        bucket.size
+    }
+
+    // ---------- распределение вероятностей ----------
+
+    /** Состояния, отсортированные по позиции: [pos] — сколько слов прочитано; вероятности «читает» и «пауза». */
+    private class Beam(
+        val pos: IntArray,
+        val on: DoubleArray,
+        val off: DoubleArray,
+        /** История совпадений лучшего пути «читает» в этом состоянии: бит 0 — последнее слово, до 8 слов. */
+        val hist: IntArray,
+    ) {
+        val size: Int get() = pos.size
+
+        fun indexOf(p: Int): Int {
+            var lo = 0
+            var hi = pos.size - 1
+            while (lo <= hi) {
+                val mid = (lo + hi) ushr 1
+                when {
+                    pos[mid] < p -> lo = mid + 1
+                    pos[mid] > p -> hi = mid - 1
+                    else -> return mid
+                }
+            }
+            return -1
+        }
+
+        fun mass(i: Int) = on[i] + off[i]
+    }
+
+    private class Cell(var on: Double, var off: Double, var bestOn: Double, var hist: Int)
+
+    private var committed: Beam = single(0)
+    private var cacheWords: List<String> = emptyList()
+    private val cacheBeams = ArrayList<Beam>().also { it.add(committed) }
+
+    private fun single(at: Int) = Beam(
+        intArrayOf(at), doubleArrayOf(cfg.seekOn), doubleArrayOf(1 - cfg.seekOn), intArrayOf(0),
+    )
 
     /** Поставить позицию вручную (долгое нажатие, оглавление, восстановление). */
     fun seek(index: Int) {
+        stopSearching()
         position = index.coerceIn(0, n)
-        committed.clear()
-    }
-
-    /** Подготовить индекс для далёких прыжков заранее (дорогая операция на длинных текстах). */
-    fun warmUp() {
-        stemIndex.size
+        committed = single(position)
+        confidence = cfg.seekOn
+        cacheWords = emptyList()
+        cacheBeams.clear()
+        cacheBeams.add(committed)
     }
 
     fun onPartial(text: String): Move? = process(text, isFinal = false)
@@ -61,222 +277,267 @@ class TextTracker(val doc: Doc) {
     private fun process(text: String, isFinal: Boolean): Move? {
         if (n == 0) return null
         val words = Words.recognized(text)
-        val buffer: List<String> = if (committed.isEmpty()) words else committed + words
-        val move = evaluate(buffer)
-        if (isFinal && words.isNotEmpty()) {
-            committed.addAll(words)
-            while (committed.size > MAX_COMMITTED) committed.removeAt(0)
+        if (words.isEmpty()) return null
+        val beam = statesFor(words, partial = !isFinal)
+        val from = position
+        val newPos = decide(beam)
+        var move: Move? = null
+        if (newPos != null) {
+            val idx = beam.indexOf(newPos)
+            move = Move(from, newPos, Integer.bitCount(beam.hist[idx]))
+            position = newPos
+        }
+        confidence = readingMassNear(beam, position)
+        trackLost(words.size, isFinal, moved = move != null)
+        if (isFinal) {
+            committed = beam
+            cacheWords = emptyList()
+            cacheBeams.clear()
+            cacheBeams.add(beam)
         }
         return move
     }
 
-    private fun evaluate(buffer: List<String>): Move? {
-        if (buffer.size < MIN_MATCHED) return null
-
-        val near = searchNear(buffer)
-        var far: Candidate? = null
-        if (buffer.size >= FAR_MIN_MATCHED && (near == null || near.matched < NEAR_STRONG)) {
-            far = searchFar(buffer)
+    /** Следит, не потерял ли подсветку читатель: много слов подряд без подтверждения места при низкой уверенности. */
+    private fun trackLost(count: Int, isFinal: Boolean, moved: Boolean) {
+        if (isFinal) {
+            if (!moved) wordsSinceMove += max(0, count - phraseAtMove)
+            phraseWords = 0
+            phraseAtMove = 0
+        } else {
+            phraseWords = count
         }
-        val chosen = when {
-            far != null && (near == null || far.matched >= near.matched + 3) -> far
-            else -> near
-        } ?: return null
-
-        val newPos = chosen.end + 1
-        if (newPos == position) return null
-        val move = Move(position, newPos, chosen.far, chosen.matched)
-        position = newPos
-        return move
+        when {
+            moved -> {
+                wordsSinceMove = 0
+                phraseAtMove = phraseWords
+                searchMode = false
+            }
+            !searchMode && !locked && unconfirmedWords() >= baseConfig.lostWords -> searchMode = true
+            searchMode && locked -> searchMode = false // уверенность вернулась без сдвига: читатель продолжил с того же места
+        }
     }
 
-    // ---------- поиск рядом ----------
-
-    private class Candidate(val end: Int, val matched: Int, val avgSim: Double, val far: Boolean)
-
-    private fun searchNear(buffer: List<String>): Candidate? {
-        val lo = max(0, position - 1 - BACK)
-        val hi = min(n - 1, position - 1 + AHEAD)
-        val aligner = Aligner(buffer, MIN_MATCHED, MIN_AVG_SIM, lo = 0)
-        var best: Candidate? = null
-        var bestScore = Double.NEGATIVE_INFINITY
-        for (e in lo..hi) {
-            if (!aligner.run(e)) continue
-            val trimmed = trimShortTail(e, aligner.matched, MIN_MATCHED) ?: continue
-            val end = trimmed.first
-            val matched = trimmed.second
-            val newPos = end + 1
-            if (newPos < position) {
-                // Откат: либо пересмотр гипотезы распознавателем (игнорируем), либо перечитывание (нужно больше слов).
-                if (position - newPos <= JITTER) continue
-                if (matched < BACKWARD_MIN_MATCHED) continue
-            }
-            val distance = if (newPos >= position) newPos - position else 2 * (position - newPos)
-            val score = min(matched, MAX_DEPTH) * 10.0 + aligner.avgSim * 5.0 - 3.0 * min(distance, AHEAD) / AHEAD
-            if (score > bestScore) {
-                bestScore = score
-                best = Candidate(end, matched, aligner.avgSim, far = false)
-            }
-        }
-        return best
+    /** Суммарная вероятность «читает» у состояний в ±3 словах от [pos]. */
+    private fun readingMassNear(beam: Beam, pos: Int): Double {
+        var m = 0.0
+        for (i in 0 until beam.size) if (abs(beam.pos[i] - pos) <= 3) m += beam.on[i]
+        return m
     }
 
-    // ---------- далёкий прыжок ----------
-
-    private fun searchFar(buffer: List<String>): Candidate? {
-        val m = buffer.size
-        val first = max(0, m - FAR_WINDOW)
-        // Голосуем за «диагонали»: слово i распознанного хвоста, найденное в тексте на позиции p, голосует за конец p + (m-1-i).
-        val votes = HashMap<Int, Int>()
-        for (i in first until m) {
-            val w = buffer[i]
-            if (w.length < 4) continue
-            val positions = stemIndex[stem(w)] ?: continue
-            if (positions.size > MAX_STEM_POSITIONS) continue
-            val shift = m - 1 - i
-            for (p in positions) {
-                val end = p + shift
-                if (end in 0 until n) votes[end] = (votes[end] ?: 0) + 1
-            }
+    /** Распределение после слов фразы; общий префикс с прошлой гипотезой берётся из кэша. */
+    private fun statesFor(words: List<String>, partial: Boolean): Beam {
+        var k = 0
+        while (k < words.size && k < cacheWords.size && cacheWords[k] == words[k]) k++
+        k = minOf(k, cacheBeams.size - 1)
+        if (partial && k >= words.size) k = max(0, words.size - 1)
+        while (cacheBeams.size > k + 1) cacheBeams.removeAt(cacheBeams.size - 1)
+        var beam = cacheBeams[k]
+        for (idx in k until words.size) {
+            beam = step(beam, words[idx], lastPartial = partial && idx == words.size - 1)
+            cacheBeams.add(beam)
         }
-        if (votes.isEmpty()) return null
+        // Недостроенное последнее слово незаконченной фразы в кэш не кладём.
+        if (partial) {
+            cacheWords = words.subList(0, words.size - 1).toList()
+            while (cacheBeams.size > words.size) cacheBeams.removeAt(cacheBeams.size - 1)
+        } else {
+            cacheWords = words.toList()
+        }
+        return beam
+    }
 
-        val ends = votes.entries
-            .map { it.key to (it.value + (votes[it.key - 1] ?: 0) + (votes[it.key + 1] ?: 0)) }
-            .filter { it.second >= FAR_MIN_VOTES }
-            .sortedByDescending { it.second }
-            .take(MAX_FAR_CANDIDATES)
-        if (ends.isEmpty()) return null
+    // ---------- один шаг фильтра ----------
 
-        val aligner = Aligner(buffer, FAR_MIN_MATCHED, FAR_MIN_AVG_SIM, lo = 0)
-        var best: Candidate? = null
-        var bestScore = Double.NEGATIVE_INFINITY
-        val tried = HashSet<Int>()
-        for ((center, _) in ends) {
-            for (e in center - 1..center + 1) {
-                if (e !in 0 until n || !tried.add(e)) continue
-                if (!aligner.run(e)) continue
-                val trimmed = trimShortTail(e, aligner.matched, FAR_MIN_MATCHED) ?: continue
-                val score = trimmed.second * 10.0 + aligner.avgSim * 5.0 - min(abs(trimmed.first + 1 - position), n) * 1e-6
-                if (score > bestScore) {
-                    bestScore = score
-                    best = Candidate(trimmed.first, trimmed.second, aligner.avgSim, far = true)
+    private fun step(beam: Beam, r: String, lastPartial: Boolean): Beam {
+        val sim = similar(r, lastPartial)
+        val acc = HashMap<Int, Cell>(beam.size * 8)
+
+        fun add(s: Int, on: Double, off: Double, hist: Int) {
+            if (s < 0 || s > n) return
+            val c = acc[s]
+            if (c == null) {
+                acc[s] = Cell(on, off, on, hist)
+            } else {
+                c.on += on
+                c.off += off
+                if (on > c.bestOn) {
+                    c.bestOn = on
+                    c.hist = hist
                 }
             }
         }
-        return best
-    }
 
-    /**
-     * Короткое слово в хвосте («и», «так», «вот») — слабое доказательство: его легко принять за мусорное слово
-     * или заикание, совпавшее с текстом. Позицию на нём не ставим и в счёт совпавших слов его не берём:
-     * кандидат должен набрать [min] слов и без хвостовых коротких. Возвращает (конец, число слов) или null.
-     */
-    private fun trimShortTail(end: Int, matched: Int, min: Int): Pair<Int, Int>? {
-        var e = end
-        var m = matched
-        var trimmed = 0
-        while (e > 0 && norm[e].length <= SHORT_WORD) {
-            if (trimmed >= MAX_TRIM || m - 1 < min) return null
-            e--
-            m--
-            trimmed++
-        }
-        return e to m
-    }
-
-    private fun buildStemIndex(): HashMap<String, IntArray> {
-        val lists = HashMap<String, ArrayList<Int>>()
-        for (i in 0 until n) {
-            val w = norm[i]
-            if (w.length < 4) continue
-            lists.getOrPut(stem(w)) { ArrayList() }.add(i)
-        }
-        val index = HashMap<String, IntArray>(lists.size * 2)
-        for ((k, v) in lists) index[k] = v.toIntArray()
-        return index
-    }
-
-    private fun stem(w: String) = if (w.length <= STEM_LEN) w else w.substring(0, STEM_LEN)
-
-    // ---------- выравнивание хвоста речи с текстом ----------
-
-    /**
-     * Ищет, насколько хвост распознанных слов (с конца) совпадает с текстом, заканчиваясь на слове [run].end.
-     * Допускается один «пропуск»: лишнее распознанное слово или пропущенное слово текста.
-     */
-    private inner class Aligner(
-        private val buffer: List<String>,
-        private val minMatched: Int,
-        private val minAvg: Double,
-        private val lo: Int,
-    ) {
-        var matched = 0
-            private set
-        var avgSim = 0.0
-            private set
-        private var bestSim = 0.0
-        private var iMin = 0
-
-        fun run(end: Int): Boolean {
-            matched = 0
-            bestSim = 0.0
-            iMin = max(0, buffer.size - MAX_DEPTH)
-            dfs(buffer.size - 1, end, 0, 0, 0.0, 0)
-            if (matched == 0) return false
-            avgSim = bestSim / matched
-            return true
+        val adv = cfg.advance
+        val keep = 1 - cfg.pReread
+        for (i in 0 until beam.size) {
+            val j = beam.pos[i]
+            val on = beam.on[i]
+            val off = beam.off[i]
+            val h = beam.hist[i]
+            if (on > 0) {
+                add(j, on * adv[0], 0.0, h)
+                add(j + 1, on * adv[1], 0.0, h)
+                add(j + 2, on * adv[2], 0.0, h)
+                add(j + 3, on * adv[3], 0.0, h)
+                add(j, 0.0, on * cfg.pStop, 0)
+            }
+            if (off > 0) {
+                add(j, 0.0, off * (1 - cfg.pStart), 0)
+                val st = off * cfg.pStart * keep
+                add(j + 1, st * 0.78, 0.0, 0)
+                add(j + 2, st * 0.15, 0.0, 0)
+                add(j + 3, st * 0.07, 0.0, 0)
+            }
         }
 
-        private fun dfs(i: Int, j: Int, gaps: Int, count: Int, sim: Double, letters: Int) {
-            if (count >= minMatched && sim / count >= minAvg && (letters >= MIN_LETTERS || count >= 6)) {
-                if (count > matched || (count == matched && sim > bestSim)) {
-                    matched = count
-                    bestSim = sim
+        // Широкие переходы (пропуск вперёд, откат, перечитывание, прыжок) — только туда, где совпало наблюдаемое слово:
+        // в остальных местах они получили бы лишь «мусорный» множитель и сгинули бы. История совпадений там с нуля.
+        if (sim.sims.isNotEmpty() && sim.count <= cfg.wideCap && beam.size > 0) {
+            val cumOn = DoubleArray(beam.size + 1)
+            val cumOff = DoubleArray(beam.size + 1)
+            for (i in 0 until beam.size) {
+                cumOn[i + 1] = cumOn[i] + beam.on[i]
+                cumOff[i + 1] = cumOff[i] + beam.off[i]
+            }
+            val jump = cfg.pJump / n
+            val skipRate = cfg.pSkip / 37
+            val backRate = cfg.pBack / 8
+            val rereadRate = cfg.pStart * cfg.pReread / 40
+            for (w in sim.sims.keys) {
+                for (wordIdx in posOf[w]!!) {
+                    val s = wordIdx + 1
+                    var m = jump
+                    m += skipRate * rangeSum(beam, cumOn, s - 40, s - 4)
+                    m += backRate * rangeSum(beam, cumOn, s + 1, s + 8)
+                    m += rereadRate * rangeSum(beam, cumOff, s + 1, s + 40)
+                    add(s, m, 0.0, 0)
                 }
             }
-            if (i < iMin || j < lo) return
+        }
 
-            val s = matcher.similarity(buffer[i], norm[j])
-            if (s > 0.0) {
-                dfs(i - 1, j - 1, gaps, count + 1, sim + s, letters + norm[j].length)
-            }
-            if (gaps < MAX_GAPS) {
-                dfs(i - 1, j, gaps + 1, count, sim, letters) // лишнее распознанное слово
-                if (count > 0) dfs(i, j - 1, gaps + 1, count, sim, letters) // пропущенное слово текста
+        // Наблюдение: «читает» — слово совпадает с текстом с вероятностью rho (чем реже слово, тем весомее),
+        // «пауза» — слово случайное.
+        val rho = cfg.rho
+        val bg = max(max(sim.count, 1).toDouble() / n, cfg.backgroundFloor)
+        val size = acc.size
+        val ps = IntArray(size)
+        val ons = DoubleArray(size)
+        val offs = DoubleArray(size)
+        val hs = IntArray(size)
+        var total = 0.0
+        var k = 0
+        for ((s, c) in acc) {
+            val sm = if (s >= 1) sim.sims[norm[s - 1]] ?: 0.0 else 0.0
+            val eOn = (1 - rho) + rho * sm / bg
+            val on2 = c.on * eOn
+            val t = on2 + c.off
+            if (t > 0) {
+                ps[k] = s
+                ons[k] = on2
+                offs[k] = c.off
+                hs[k] = ((c.hist shl 1) or (if (sm > 0) 1 else 0)) and 0xFF
+                total += t
+                k++
             }
         }
+        if (total <= 0 || k == 0) return beam
+
+        // Нормировка, отсечение слабых состояний и ограничение размера пучка.
+        val inv = 1.0 / total
+        var keepCount = 0
+        val idx = IntArray(k)
+        for (q in 0 until k) {
+            ons[q] *= inv
+            offs[q] *= inv
+            if (ons[q] + offs[q] >= cfg.prune) idx[keepCount++] = q
+        }
+        if (keepCount == 0) return beam
+        var chosen = idx.copyOf(keepCount)
+        if (keepCount > cfg.beam) {
+            chosen = chosen.sortedByDescending { ons[it] + offs[it] }.take(cfg.beam).toIntArray()
+        }
+        chosen = chosen.sortedBy { ps[it] }.toIntArray()
+        var z = 0.0
+        if (keepCount > cfg.beam) for (q in chosen) z += ons[q] + offs[q]
+        val scale = if (z > 0) 1.0 / z else 1.0
+        return Beam(
+            IntArray(chosen.size) { ps[chosen[it]] },
+            DoubleArray(chosen.size) { ons[chosen[it]] * scale },
+            DoubleArray(chosen.size) { offs[chosen[it]] * scale },
+            IntArray(chosen.size) { hs[chosen[it]] },
+        )
     }
 
-    companion object {
-        /** Сколько подряд совпавших слов подтверждают позицию рядом. */
-        const val MIN_MATCHED = 4
-        const val MIN_AVG_SIM = 0.90
-        /** Хватает ли букв в совпавших словах (чтобы «и в на не» ничего не подтверждали). */
-        const val MIN_LETTERS = 14
-        const val MAX_GAPS = 1
+    /** Сумма по состояниям с позицией в [lo, hi]. */
+    private fun rangeSum(beam: Beam, cum: DoubleArray, lo: Int, hi: Int): Double {
+        if (hi < lo) return 0.0
+        var a = 0
+        var b = beam.size
+        while (a < b) {
+            val mid = (a + b) ushr 1
+            if (beam.pos[mid] < lo) a = mid + 1 else b = mid
+        }
+        val left = a
+        a = left
+        b = beam.size
+        while (a < b) {
+            val mid = (a + b) ushr 1
+            if (beam.pos[mid] <= hi) a = mid + 1 else b = mid
+        }
+        return cum[a] - cum[left]
+    }
 
-        /** Окно локального поиска, в словах: вперёд и назад от текущей позиции. */
-        const val AHEAD = 200
-        const val BACK = 50
-        const val BACKWARD_MIN_MATCHED = 5
-        const val JITTER = 2
+    // ---------- решение: двигать ли подсветку ----------
 
-        /** Далёкий прыжок: длинное и точное совпадение. */
-        const val FAR_MIN_MATCHED = 8
-        const val FAR_MIN_AVG_SIM = 0.92
-        private const val NEAR_STRONG = 6
-        private const val FAR_WINDOW = 12
-        private const val FAR_MIN_VOTES = 5
-        private const val MAX_FAR_CANDIDATES = 40
-        private const val MAX_STEM_POSITIONS = 150
-        private const val STEM_LEN = 5
+    private fun bestState(beam: Beam): Int {
+        var best = 0
+        var bestMass = -1.0
+        for (i in 0 until beam.size) {
+            val m = beam.mass(i)
+            if (m > bestMass) {
+                bestMass = m
+                best = i
+            }
+        }
+        return beam.pos[best]
+    }
 
-        /** Слова не длиннее этого не служат опорой для позиции в хвосте. */
-        private const val SHORT_WORD = 3
-        private const val MAX_TRIM = 2
+    /** Новая позиция подсветки или null, если уверенности нет. */
+    private fun decide(beam: Beam): Int? {
+        if (beam.size == 0) return null
+        val s = bestState(beam)
+        val i = beam.indexOf(s)
+        var local = beam.mass(i)
+        beam.indexOf(s - 1).let { if (it >= 0) local += beam.mass(it) }
+        beam.indexOf(s + 1).let { if (it >= 0) local += beam.mass(it) }
+        val d = s - position
+        if (d == 0) return null
+        val hist = beam.hist[i]
+        if (hist and 1 == 0) return null // последнее слово должно совпасть именно здесь
+        val matched = Integer.bitCount(hist)
+        val ad = abs(d)
 
-        private const val MAX_COMMITTED = 12
-        private const val MAX_DEPTH = 14
+        var needMatched: Int
+        val needMass: Double
+        when {
+            d in 1..2 -> { needMatched = cfg.needNear; needMass = cfg.tauMove }
+            d in 3..10 -> { needMatched = cfg.needMid; needMass = cfg.tauMid }
+            ad <= cfg.farAfter -> { needMatched = cfg.needFar; needMass = cfg.tauMid }
+            ad <= cfg.hugeAfter -> { needMatched = cfg.needJump; needMass = cfg.tauFar }
+            else -> { needMatched = cfg.needHuge; needMass = cfg.tauFar }
+        }
+        if (d < 0) {
+            if (ad <= cfg.jitter) return null
+            needMatched = max(needMatched, cfg.needFar)
+        }
+        if (matched < needMatched || local < needMass) return null
+        return s
+    }
+
+    private companion object {
+        const val PREFIX_SIM = 0.6
+        const val SIMILAR_CACHE_MAX = 20_000
+        const val FAR_DELTA = 40
     }
 }

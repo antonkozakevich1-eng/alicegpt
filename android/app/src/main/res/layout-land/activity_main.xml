@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Горизонтальный экран: текст слева, панель управления справа, чтобы тексту хватало высоты. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/rootLayout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fitsSystemWindows="true"
+    android:orientation="vertical"
+    android:tag="land">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingLeft="4dp"
+        android:paddingRight="4dp">
+
+        <ImageButton
+            android:id="@+id/tocButton"
+            style="@style/IconBtn"
+            android:contentDescription="@string/toc"
+            android:src="@drawable/ic_list" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:paddingLeft="6dp"
+            android:paddingRight="6dp">
+
+            <TextView
+                android:id="@+id/titleText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="?attr/textMain"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/chapterText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="?attr/textSubtle"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <ImageButton
+            android:id="@+id/searchButton"
+            style="@style/IconBtn"
+            android:contentDescription="@string/search"
+            android:src="@drawable/ic_search" />
+
+        <ImageButton
+            android:id="@+id/fileButton"
+            style="@style/IconBtn"
+            android:contentDescription="@string/file"
+            android:src="@drawable/ic_folder" />
+
+        <ImageButton
+            android:id="@+id/settingsButton"
+            style="@style/IconBtn"
+            android:contentDescription="@string/settings"
+            android:src="@drawable/ic_tune" />
+    </LinearLayout>
+
+    <ProgressBar
+        android:id="@+id/bookProgress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="3dp"
+        android:max="1000"
+        android:progressBackgroundTint="?attr/strokeColor"
+        android:progressTint="?attr/accentColor" />
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_alignParentLeft="true"
+            android:layout_toLeftOf="@+id/sidePanel">
+
+            <com.alicegpt.textfollower.ui.ReaderView
+                android:id="@+id/reader"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <TextView
+                android:id="@+id/banner"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|center_horizontal"
+                android:layout_margin="12dp"
+                android:background="@drawable/bg_banner"
+                android:gravity="center"
+                android:paddingLeft="14dp"
+                android:paddingTop="8dp"
+                android:paddingRight="14dp"
+                android:paddingBottom="8dp"
+                android:text="@string/banner_searching"
+                android:textColor="?attr/textMain"
+                android:textSize="13sp"
+                android:visibility="gone" />
+        </FrameLayout>
+
+        <!-- правая панель управления -->
+        <LinearLayout
+            android:id="@+id/sidePanel"
+            android:layout_width="270dp"
+            android:layout_height="match_parent"
+            android:layout_alignParentRight="true"
+            android:background="@drawable/bg_panel_side"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:paddingLeft="16dp"
+            android:paddingTop="12dp"
+            android:paddingRight="16dp"
+            android:paddingBottom="8dp">
+
+            <TextView
+                android:id="@+id/statusText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_horizontal"
+                android:textColor="?attr/textMain"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/statsText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:gravity="center_horizontal"
+                android:textColor="?attr/textSubtle"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/heardText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:ellipsize="start"
+                android:gravity="center_horizontal"
+                android:maxLines="2"
+                android:text="@string/heard_placeholder"
+                android:textColor="?attr/textSubtle"
+                android:textSize="13sp"
+                android:textStyle="italic" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+            <com.alicegpt.textfollower.ui.MicButton
+                android:id="@+id/micButton"
+                android:layout_width="92dp"
+                android:layout_height="92dp"
+                android:contentDescription="@string/start" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:gravity="center"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/fontSmaller"
+                    style="@style/Btn"
+                    android:layout_width="64dp"
+                    android:layout_height="44dp"
+                    android:text="@string/font_smaller" />
+
+                <Button
+                    android:id="@+id/fontBigger"
+                    style="@style/Btn"
+                    android:layout_width="64dp"
+                    android:layout_height="44dp"
+                    android:layout_marginLeft="12dp"
+                    android:text="@string/font_bigger" />
+            </LinearLayout>
+        </LinearLayout>
+    </RelativeLayout>
+</LinearLayout>

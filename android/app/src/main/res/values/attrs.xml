@@ -11,4 +11,8 @@
     <attr name="panelBg" format="color" />
     <attr name="accentColor" format="color" />
     <attr name="onAccent" format="color" />
+    <attr name="strokeColor" format="color" />
+    <attr name="goodColor" format="color" />
+    <attr name="warnColor" format="color" />
+    <attr name="badColor" format="color" />
 </resources>

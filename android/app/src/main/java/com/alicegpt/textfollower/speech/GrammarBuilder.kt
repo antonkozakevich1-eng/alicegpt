@@ -19,14 +19,15 @@ object GrammarBuilder {
     /** JSON-массив для Vosk: слова окна [window] слов вокруг [center] и «[unk]». */
     fun forWindow(doc: Doc, center: Int, window: Int = DEFAULT_WINDOW): String {
         val back = window / BACK_SHARE
-        val from = (center - back).coerceAtLeast(0)
-        val to = (center + window - back).coerceAtMost(doc.size)
-        val words = LinkedHashSet<String>()
-        for (i in from until to) {
-            for (v in yoVariants(doc.norm[i])) words.add(v)
-        }
+        return fromWords(ContextWords.window(doc, center, back, window - back))
+    }
+
+    /** JSON-массив для Vosk из готового списка слов (добавляются варианты через «ё» и «[unk]»). */
+    fun fromWords(words: List<String>): String {
+        val all = LinkedHashSet<String>()
+        for (w in words) for (v in yoVariants(w)) all.add(v)
         val arr = JSONArray()
-        words.forEach { arr.put(it) }
+        all.forEach { arr.put(it) }
         arr.put(UNKNOWN)
         return arr.toString()
     }

@@ -11,6 +11,11 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // Официальная Android-библиотека sherpa-onnx (нейросетевое распознавание) публикуется через JitPack.
+        maven {
+            url = uri("https://jitpack.io")
+            content { includeGroup("com.github.k2-fsa.sherpa-onnx") }
+        }
     }
 }
 

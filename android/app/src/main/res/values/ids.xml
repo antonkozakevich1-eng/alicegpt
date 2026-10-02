@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- строка результатов поиска -->
+    <item name="search_snippet" type="id" />
+    <item name="search_chapter" type="id" />
+</resources>

@@ -1,28 +1,60 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="light_bg">#FFFAF7F0</color>
-    <color name="light_text">#FF1B1B1B</color>
-    <color name="light_dim">#FFA8A29A</color>
-    <color name="light_subtle">#FF6B6B6B</color>
+    <!-- Бумага -->
+    <color name="light_bg">#FFFBF8F1</color>
+    <color name="light_text">#FF1F1D1A</color>
+    <color name="light_dim">#FFB5AEA3</color>
+    <color name="light_subtle">#FF6F6A62</color>
     <color name="light_hl_bg">#FFFFD54F</color>
-    <color name="light_hl_text">#FF000000</color>
-    <color name="light_marker">#FF9E9E9E</color>
-    <color name="light_heading">#FF6D4C41</color>
-    <color name="light_panel">#FFEFE9DD</color>
-    <color name="light_accent">#FF2E5BFF</color>
+    <color name="light_hl_text">#FF1A1200</color>
+    <color name="light_marker">#FFA39C90</color>
+    <color name="light_heading">#FF7A4B2A</color>
+    <color name="light_panel">#FFF0EADD</color>
+    <color name="light_accent">#FF3D5AFE</color>
     <color name="light_on_accent">#FFFFFFFF</color>
+    <color name="light_stroke">#FFD9D2C3</color>
+    <color name="light_good">#FF2E7D32</color>
+    <color name="light_warn">#FFB26A00</color>
+    <color name="light_bad">#FFC62828</color>
 
+    <!-- Сепия -->
+    <color name="sepia_bg">#FFF4ECD8</color>
+    <color name="sepia_text">#FF3B2F20</color>
+    <color name="sepia_dim">#FFB8A98A</color>
+    <color name="sepia_subtle">#FF7A6A50</color>
+    <color name="sepia_hl_bg">#FFFFC857</color>
+    <color name="sepia_hl_text">#FF2A1B00</color>
+    <color name="sepia_marker">#FFA8997B</color>
+    <color name="sepia_heading">#FF8A4B1E</color>
+    <color name="sepia_panel">#FFE9DEC3</color>
+    <color name="sepia_accent">#FF8A5A2B</color>
+    <color name="sepia_on_accent">#FFFFFFFF</color>
+    <color name="sepia_stroke">#FFD3C4A2</color>
+
+    <!-- Тёмная -->
     <color name="dark_bg">#FF121212</color>
-    <color name="dark_text">#FFE6E1D8</color>
-    <color name="dark_dim">#FF5C5A57</color>
-    <color name="dark_subtle">#FF9A9A9A</color>
+    <color name="dark_text">#FFE7E2D9</color>
+    <color name="dark_dim">#FF5E5B57</color>
+    <color name="dark_subtle">#FF9C9890</color>
     <color name="dark_hl_bg">#FFFFB300</color>
     <color name="dark_hl_text">#FF000000</color>
-    <color name="dark_marker">#FF6E6E6E</color>
+    <color name="dark_marker">#FF6B6862</color>
     <color name="dark_heading">#FFD7B98E</color>
-    <color name="dark_panel">#FF1E1E1E</color>
-    <color name="dark_accent">#FF7C9DFF</color>
+    <color name="dark_panel">#FF1E1E1F</color>
+    <color name="dark_accent">#FF8CA2FF</color>
     <color name="dark_on_accent">#FF0B1020</color>
+    <color name="dark_stroke">#FF2E2E30</color>
+    <color name="dark_good">#FF7BD88F</color>
+    <color name="dark_warn">#FFFFC247</color>
+    <color name="dark_bad">#FFFF8A80</color>
+
+    <!-- Чёрная (AMOLED) -->
+    <color name="black_bg">#FF000000</color>
+    <color name="black_text">#FFDEDAD2</color>
+    <color name="black_dim">#FF55524E</color>
+    <color name="black_subtle">#FF8E8A83</color>
+    <color name="black_panel">#FF0F0F10</color>
+    <color name="black_stroke">#FF232325</color>
 
     <color name="icon_bg">#FF1F2A44</color>
 </resources>

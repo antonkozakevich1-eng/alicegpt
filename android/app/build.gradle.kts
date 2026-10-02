@@ -16,7 +16,7 @@ android {
         versionCode = 1
         versionName = "1.0"
 
-        // Нативные библиотеки Vosk весят по ~10 МБ на архитектуру; эмуляторы x86 не нужны.
+        // Нативные библиотеки распознавания весят десятки мегабайт на архитектуру; эмуляторы x86 не нужны.
         // Облегчённая сборка только для 64-битных телефонов: ./gradlew assembleDebug -Pabis=arm64-v8a
         ndk {
             val abis = (findProperty("abis") as String?)?.split(",")?.map { it.trim() }
@@ -45,6 +45,8 @@ android {
     packaging {
         // JNA (через неё Vosk грузит libvosk.so) надёжнее работает с распакованными библиотеками.
         jniLibs.useLegacyPackaging = true
+        // JNI-обёртка sherpa-onnx связана только с onnxruntime; библиотеки C/C++ API приложению не нужны (≈5 МБ на архитектуру).
+        jniLibs.excludes += listOf("**/libsherpa-onnx-c-api.so", "**/libsherpa-onnx-cxx-api.so")
     }
 
     testOptions {
@@ -55,7 +57,7 @@ android {
     }
 
     lint {
-        // эмуляторы x86 и ChromeOS не нужны: Vosk весит ~10 МБ на каждую архитектуру
+        // эмуляторы x86 и ChromeOS не нужны: нативные библиотеки весят десятки МБ на каждую архитектуру
         disable += "ChromeOsAbiSupport"
     }
 
@@ -66,6 +68,7 @@ android {
 }
 
 dependencies {
+    implementation("com.github.k2-fsa.sherpa-onnx:sherpa-onnx:1.13.8@aar")
     implementation("com.alphacephei:vosk-android:0.3.75")
     implementation("net.java.dev.jna:jna:5.18.1@aar")
 
@@ -75,11 +78,47 @@ dependencies {
     testImplementation("org.robolectric:robolectric:4.14.1")
 }
 
-// Офлайн-модель распознавания (~46 МБ) не хранится в git: при сборке скачивается в build/vosk-assets и вшивается в APK.
-// Облегчённая сборка без модели (~6 МБ): ./gradlew assembleDebug -PbundleModel=false —
-// такое приложение скачает модель при первом запуске (нужен интернет, один раз).
+// Модели распознавания не лежат в git. Что вшивается в APK, задаёт свойство bundleModel:
+//   ./gradlew assembleDebug                      — нейросетевая модель (≈28 МБ): работает без интернета (по умолчанию);
+//   ./gradlew assembleDebug -PbundleModel=false  — «лёгкий» APK без моделей: скачает модель при первом запуске;
+//   -PbundleModel=vosk | all                     — вшить запасной Vosk (≈46 МБ) вместо нейросети / вместе с ней.
+// Модель, которой нет в APK, приложение при необходимости скачивает само (см. NeuralModelStore, ModelInstaller).
+val bundleModel = (findProperty("bundleModel") as String?) ?: "neural"
+val bundleNeural = bundleModel == "neural" || bundleModel == "all"
+val bundleVosk = bundleModel == "vosk" || bundleModel == "all"
+
+// Нейросеть: файлы и размеры те же, что в NeuralModelStore.FILES (это проверяет юнит-тест).
+class ModelFile(val name: String, val url: String, val size: Long)
+
+val neuralFiles = listOf(
+    ModelFile("encoder.int8.onnx", "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-small-ru-vosk-int8-2025-08-16/resolve/main/encoder.int8.onnx", 26214060),
+    ModelFile("decoder.onnx", "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-small-ru-vosk-int8-2025-08-16/resolve/main/decoder.onnx", 2093080),
+    ModelFile("joiner.int8.onnx", "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-small-ru-vosk-int8-2025-08-16/resolve/main/joiner.int8.onnx", 259417),
+    ModelFile("tokens.txt", "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-small-ru-vosk-int8-2025-08-16/resolve/main/tokens.txt", 6388),
+    ModelFile("unigram_500.vocab", "https://huggingface.co/alphacep/vosk-model-small-streaming-ru/resolve/main/lang/unigram_500.vocab", 8891),
+)
+val neuralAssetsRoot = layout.buildDirectory.dir("neural-assets").get().asFile
+val neuralAssetsDir = File(neuralAssetsRoot, "neural-ru")
+
+val downloadNeuralModel by tasks.registering {
+    description = "Скачивает нейросетевую модель распознавания для вшивания в APK, если её ещё нет"
+    outputs.dir(neuralAssetsDir)
+    onlyIf { neuralFiles.any { File(neuralAssetsDir, it.name).length() != it.size } }
+    doLast {
+        neuralAssetsDir.mkdirs()
+        for (f in neuralFiles) {
+            val target = File(neuralAssetsDir, f.name)
+            if (target.length() == f.size) continue
+            val tmp = File(neuralAssetsDir, f.name + ".part")
+            URL(f.url).openStream().use { input -> tmp.outputStream().use { input.copyTo(it) } }
+            check(tmp.length() == f.size) { "${f.name}: скачано ${tmp.length()} байт из ${f.size}" }
+            check(tmp.renameTo(target)) { "не удалось сохранить ${f.name}" }
+        }
+    }
+}
+
+// Запасной движок Vosk: модель — один zip (~46 МБ).
 val voskModelName = "vosk-model-small-ru-0.22"
-val bundleModel = findProperty("bundleModel") != "false"
 val voskAssetsDir = layout.buildDirectory.dir("vosk-assets").get().asFile
 val voskModelZip = File(voskAssetsDir, "$voskModelName.zip")
 
@@ -98,7 +137,11 @@ val downloadVoskModel by tasks.registering {
     }
 }
 
-if (bundleModel) {
+if (bundleNeural) {
+    android.sourceSets.getByName("main").assets.srcDir(neuralAssetsRoot)
+    tasks.named("preBuild") { dependsOn(downloadNeuralModel) }
+}
+if (bundleVosk) {
     android.sourceSets.getByName("main").assets.srcDir(voskAssetsDir)
     tasks.named("preBuild") { dependsOn(downloadVoskModel) }
 }
