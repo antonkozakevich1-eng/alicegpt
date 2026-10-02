@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Трекер чтения</string>
+    <string name="default_title">Гомер. Одиссея (пер. Жуковского)</string>
+    <string name="toc">Оглавление</string>
+    <string name="search">Поиск по тексту</string>
+    <string name="file">Файл</string>
+    <string name="settings">Настройки</string>
+    <string name="start">Начать слушать</string>
+    <string name="pause">Пауза</string>
+    <string name="retry">Повторить</string>
+    <string name="mic_busy">Подготовка</string>
+    <string name="font_smaller">A−</string>
+    <string name="font_bigger">A+</string>
+
+    <string name="status_preparing_model">Подготовка модели (один раз)… %1$d%%</string>
+    <string name="status_downloading_model">Загрузка модели (один раз, ≈%1$d МБ)… %2$d%%</string>
+    <string name="status_loading_text">Загрузка текста…</string>
+    <string name="status_ready">Нажмите на микрофон</string>
+    <string name="status_starting">Запуск микрофона…</string>
+    <string name="status_listening">Слушаю</string>
+    <string name="status_searching">Ищу место в тексте…</string>
+    <string name="status_paused">Пауза</string>
+    <string name="status_error">Ошибка: %1$s</string>
+    <string name="status_finished">Текст дочитан до конца</string>
+    <string name="banner_searching">Потерял место. Читайте дальше — я найду, или удержите слово пальцем.</string>
+    <string name="heard_format">слышу: %1$s</string>
+    <string name="heard_placeholder">Здесь появится то, что слышит микрофон</string>
+    <string name="stats_format">%1$d сл · %2$d сл/мин · %3$s</string>
+    <string name="chapter_progress">%1$s · %2$d%%</string>
+
+    <string name="open_file">Открыть файл (.txt, .html, .mht)…</string>
+    <string name="restore_default">Вернуть «Одиссею» (текст по умолчанию)</string>
+    <string name="seek_here">Читаем отсюда: «%1$s»</string>
+    <string name="file_empty">В файле не найден текст</string>
+    <string name="file_error">Не удалось открыть файл: %1$s</string>
+    <string name="file_opened">Открыто: %1$s</string>
+    <string name="error_no_internet">нет соединения с интернетом: модель нужно скачать один раз</string>
+    <string name="permission_needed">Для распознавания речи нужен доступ к микрофону. Разрешите его в настройках приложения.</string>
+    <string name="engine_fallback">Нейросеть не работает на этом телефоне (%1$s). Переключился на Vosk; сменить движок можно в настройках.</string>
+
+    <string name="close">Закрыть</string>
+    <string name="toc_title">Оглавление</string>
+    <string name="file_title">Файл</string>
+
+    <string name="settings_section_recognition">Распознавание</string>
+    <string name="settings_section_look">Оформление</string>
+    <string name="settings_section_other">Прочее</string>
+    <string name="engine_neural">Нейросеть (рекомендуется)</string>
+    <string name="engine_vosk">Vosk (классический, запасной)</string>
+    <string name="engine_hint">Нейросеть точнее и быстрее (модель ≈%1$d МБ). Vosk — запасной вариант (≈%2$d МБ). Распознавание идёт на телефоне, без интернета; если модели нет внутри приложения, она скачивается один раз.</string>
+    <string name="settings_sensitivity">Чувствительность микрофона: %1$s</string>
+    <string name="settings_sensitivity_hint">Выше — лучше слышит тихую речь, но усиливает и шум.</string>
+    <string name="settings_context">Подсказывать распознавателю слова из текста</string>
+    <string name="settings_context_hint">Слова вокруг вашего места подсказываются распознавателю — он реже ошибается на редких словах. Не мешает читать в другом месте.</string>
+    <string name="theme_system">Тема: как в системе</string>
+    <string name="theme_light">Тема: бумага</string>
+    <string name="theme_sepia">Тема: сепия</string>
+    <string name="theme_dark">Тема: тёмная</string>
+    <string name="theme_black">Тема: чёрная (для AMOLED)</string>
+    <string name="settings_font_size">Размер шрифта: %1$s</string>
+    <string name="settings_line_spacing">Межстрочный интервал: %1$s</string>
+    <string name="settings_serif">Шрифт с засечками</string>
+    <string name="settings_autoscroll">Прокручивать текст за подсветкой</string>
+    <string name="settings_reset_stats">Сбросить статистику</string>
+    <string name="about_text">Распознавание речи — на устройстве: нейросеть zipformer (sherpa-onnx) и Vosk, модели с лицензией Apache-2.0.</string>
+
+    <string name="search_hint">Слово или фраза</string>
+    <string name="search_prompt">Введите хотя бы две буквы</string>
+    <string name="search_nothing">Ничего не найдено</string>
+    <string name="search_found">Найдено: %1$d</string>
+    <string name="search_many">Показаны первые 60 совпадений — уточните запрос</string>
+
+    <string name="intro_title">Как это работает</string>
+    <string name="intro_1">1. Нажмите на микрофон и читайте текст вслух — подсветка пойдёт по словам вслед за голосом.</string>
+    <string name="intro_2">2. Если потерялись или хотите начать с другого места, удержите слово пальцем. Приложение само найдёт место, если вы просто начнёте читать с него.</string>
+    <string name="intro_3">3. Оглавление и поиск — в верхней панели. Свой текст (.txt, .html, .mht) открывается кнопкой с папкой.</string>
+    <string name="intro_4">Распознавание работает прямо на телефоне, без интернета. Если модель не вшита в приложение, она скачивается один раз при первом запуске.</string>
+    <string name="intro_ok">Понятно</string>
+</resources>

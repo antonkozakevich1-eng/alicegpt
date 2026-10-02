@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Автокопия Android (до 25 МБ) не должна тащить модели распознавания: они распаковываются или скачиваются заново. -->
+<full-backup-content>
+    <exclude domain="file" path="model" />
+</full-backup-content>

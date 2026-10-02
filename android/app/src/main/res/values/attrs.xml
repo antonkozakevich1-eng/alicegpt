@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <attr name="appBg" format="color" />
+    <attr name="textMain" format="color" />
+    <attr name="textDim" format="color" />
+    <attr name="textSubtle" format="color" />
+    <attr name="hlBg" format="color" />
+    <attr name="hlText" format="color" />
+    <attr name="markerColor" format="color" />
+    <attr name="headingColor" format="color" />
+    <attr name="panelBg" format="color" />
+    <attr name="accentColor" format="color" />
+    <attr name="onAccent" format="color" />
+    <attr name="strokeColor" format="color" />
+    <attr name="goodColor" format="color" />
+    <attr name="warnColor" format="color" />
+    <attr name="badColor" format="color" />
+</resources>
