@@ -6,7 +6,7 @@ from multiprocessing import Pool
 SetLogLevel(-1)
 
 lines, words = load_book()
-OUT = 'exp/events'
+OUT = EV
 os.makedirs(OUT, exist_ok=True)
 CHUNK = 1600  # 100 мс, как в приложении
 
@@ -97,14 +97,13 @@ def job(args):
     timing = d['timing'] if 'timing' in d.files else None
     x = make_condition(audio, cond, seed)
     pcm = to_int16(np.concatenate([x, np.zeros(16000, dtype=np.float32)]))
-    center = int(timing[0][2]) if timing is not None else 50000
+    center = int(timing[0][2]) if timing is not None else FOREIGN_CENTER
     if cond == 'elsewhere':
-        voice, pi = clip.rsplit('_', 1)
-        other = np.load(f'exp/audio/{voice}_{(int(pi) + 3) % 6}.npz')['timing']
+        other = np.load(f'exp/audio/{other_clip(clip)}.npz')['timing']
         center = int(other[0][2])
     g = grammar(variant, center)
     rec = KaldiRecognizer(_model, 16000, g) if g else KaldiRecognizer(_model, 16000)
-    ev = [{'k': 'start', 'pos': center}]
+    ev = [{'k': 'start', 'pos': center, 'doc': DOC}]
     li = 0
     for i in range(0, len(pcm), CHUNK):
         t = i
@@ -130,9 +129,7 @@ def job(args):
 if __name__ == '__main__':
     variants = sys.argv[1].split(',')
     conds = sys.argv[2].split(',')
-    clips = sorted(os.path.basename(p)[:-4] for p in glob.glob('exp/audio/*.npz'))
-    book = [c for c in clips if not c.startswith('foreign')]
-    foreign = [c for c in clips if c.startswith('foreign')]
+    book, foreign = clip_list()
     jobs = []
     for v in variants:
         for c in conds:

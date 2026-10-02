@@ -20,7 +20,7 @@ def word_acc(path):
 agg = collections.defaultdict(lambda: collections.defaultdict(list))
 for r in rows:
     variant, cond, clip = r['name'].split('__')
-    kind = 'foreign' if clip.startswith('foreign') else cond
+    kind = 'foreign' if 'foreign' in clip else cond
     a = agg[(variant, kind)]
     a['moves'].append(int(r['moves']))
     a['bad'].append(int(r['bad']))
@@ -29,7 +29,7 @@ for r in rows:
     if marks:
         a['lineAcc'].append(ok / marks)
         a['endLag'].append(int(r['endTruth']) - int(r['endPos']))
-        wa, hr = word_acc(f'exp/events/{r["name"]}.jsonl')
+        wa, hr = word_acc(f'{EV}/{r["name"]}.jsonl')
         a['wordAcc'].append(wa)
     else:
         a['moveDist'].append(abs(int(r['endPos']) - 50000))
@@ -39,7 +39,7 @@ variants = []
 for (v, c) in agg:
     if v not in variants: variants.append(v)
 conds = ['clean', 'quiet_gain', 'noisy', 'quietnoisy_gain']
-order = ['nogram', 'words_yo@100', 'words_yo@300', 'bi@300', 'tri@300', 'quad@300', 'lines@300']
+order = ['zip_small', 'zip_hot20@300', 'zip_hot40@300', 'nogram', 'words_yo@100', 'words_yo@300', 'bi@300', 'tri@300', 'quad@300', 'lines@300']
 variants = [v for v in order if v in variants]
 def table(title, key, fmt='{:16.2f}'):
     print('\n== ' + title + ' ==')

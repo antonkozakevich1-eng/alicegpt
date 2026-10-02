@@ -5,11 +5,15 @@ local.properties
 .idea/
 captures/
 .kotlin/
-# эксперимент с Vosk: тяжёлые данные не храним
-tools/vosk-experiment/venv/
-tools/vosk-experiment/models/
-tools/vosk-experiment/voices/
-tools/vosk-experiment/exp/audio/
-tools/vosk-experiment/exp/events/
-tools/vosk-experiment/exp/results.tsv
-tools/vosk-experiment/exp/__pycache__/
+# замеры распознавания: тяжёлые данные и результаты не храним
+tools/recognition-experiments/venv/
+tools/recognition-experiments/models/
+tools/recognition-experiments/voices/
+tools/recognition-experiments/zip/
+tools/recognition-experiments/fleurs/
+tools/recognition-experiments/exp/audio/
+tools/recognition-experiments/exp/docs/
+tools/recognition-experiments/exp/events*/
+tools/recognition-experiments/exp/traces*/
+tools/recognition-experiments/exp/results*.tsv
+tools/recognition-experiments/exp/__pycache__/
