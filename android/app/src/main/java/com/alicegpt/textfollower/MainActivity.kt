@@ -75,6 +75,7 @@ class MainActivity : Activity(), VoskEngine.Listener {
     // состояние
     private var modelReady = false
     private var modelProgress = -1
+    private var modelDownloading = false
     private var wantListening = false     // пользователь нажал «Старт» и не нажимал «Пауза»
     private var resumeAfterPause = false
     private var starting = false
@@ -210,7 +211,10 @@ class MainActivity : Activity(), VoskEngine.Listener {
             return
         }
         modelProgress = 0
+        modelDownloading = !ModelInstaller.isBundled(this)
+        lastError = null
         refreshStatus()
+        updateStartButton()
         Thread {
             try {
                 ModelInstaller.install(this) { p ->
@@ -228,7 +232,9 @@ class MainActivity : Activity(), VoskEngine.Listener {
             } catch (e: Throwable) {
                 ui.post {
                     modelProgress = -1
-                    statusText.text = getString(R.string.status_error, e.message ?: e.javaClass.simpleName)
+                    lastError = e.message ?: e.javaClass.simpleName
+                    refreshStatus()
+                    updateStartButton()
                 }
             }
         }.start()
@@ -599,6 +605,10 @@ class MainActivity : Activity(), VoskEngine.Listener {
     // ---------- прослушивание ----------
 
     private fun toggleListening() {
+        if (!modelReady) {
+            if (modelProgress < 0) prepareModel() // загрузка модели не удалась — пробуем снова
+            return
+        }
         if (wantListening) {
             wantListening = false
             engine.stop()
@@ -730,16 +740,24 @@ class MainActivity : Activity(), VoskEngine.Listener {
     // ---------- состояние интерфейса ----------
 
     private fun updateStartButton() {
-        startButton.isEnabled = modelReady && tracker != null
+        val canRetryModel = !modelReady && modelProgress < 0
+        startButton.isEnabled = tracker != null && (modelReady || canRetryModel)
         startButton.alpha = if (startButton.isEnabled) 1f else 0.5f
-        startButton.setText(if (wantListening) R.string.pause else R.string.start)
+        startButton.setText(
+            when {
+                canRetryModel -> R.string.retry_model
+                wantListening -> R.string.pause
+                else -> R.string.start
+            },
+        )
     }
 
     private fun refreshStatus() {
         val d = doc
         val t = tracker
         statusText.text = when {
-            !modelReady && modelProgress >= 0 -> getString(R.string.status_preparing_model, modelProgress)
+            !modelReady && modelProgress >= 0 ->
+                getString(if (modelDownloading) R.string.status_downloading_model else R.string.status_preparing_model, modelProgress)
             lastError != null && !engine.isRunning -> getString(R.string.status_error, lastError)
             d == null || t == null -> getString(R.string.status_loading_text)
             d.size > 0 && t.position >= d.size -> getString(R.string.status_finished)

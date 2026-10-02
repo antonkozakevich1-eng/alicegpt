@@ -17,8 +17,11 @@ android {
         versionName = "1.0"
 
         // Нативные библиотеки Vosk весят по ~10 МБ на архитектуру; эмуляторы x86 не нужны.
+        // Облегчённая сборка только для 64-битных телефонов: ./gradlew assembleDebug -Pabis=arm64-v8a
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+            val abis = (findProperty("abis") as String?)?.split(",")?.map { it.trim() }
+                ?: listOf("arm64-v8a", "armeabi-v7a")
+            abiFilters += abis
         }
     }
 
@@ -72,17 +75,21 @@ dependencies {
     testImplementation("org.robolectric:robolectric:4.14.1")
 }
 
-// Офлайн-модель распознавания (~46 МБ) не хранится в git: при первой сборке скачивается и кладётся в assets.
+// Офлайн-модель распознавания (~46 МБ) не хранится в git: при сборке скачивается в build/vosk-assets и вшивается в APK.
+// Облегчённая сборка без модели (~6 МБ): ./gradlew assembleDebug -PbundleModel=false —
+// такое приложение скачает модель при первом запуске (нужен интернет, один раз).
 val voskModelName = "vosk-model-small-ru-0.22"
-val voskModelZip = layout.projectDirectory.file("src/main/assets/$voskModelName.zip").asFile
+val bundleModel = findProperty("bundleModel") != "false"
+val voskAssetsDir = layout.buildDirectory.dir("vosk-assets").get().asFile
+val voskModelZip = File(voskAssetsDir, "$voskModelName.zip")
 
 val downloadVoskModel by tasks.registering {
-    description = "Скачивает $voskModelName.zip в assets, если его там нет"
+    description = "Скачивает $voskModelName.zip для вшивания в APK, если его ещё нет"
     outputs.file(voskModelZip)
     onlyIf { !voskModelZip.exists() }
     doLast {
-        val tmp = File(voskModelZip.parentFile, "$voskModelName.zip.part")
-        voskModelZip.parentFile.mkdirs()
+        val tmp = File(voskAssetsDir, "$voskModelName.zip.part")
+        voskAssetsDir.mkdirs()
         URL("https://alphacephei.com/vosk/models/$voskModelName.zip").openStream().use { input ->
             tmp.outputStream().use { input.copyTo(it) }
         }
@@ -91,4 +98,7 @@ val downloadVoskModel by tasks.registering {
     }
 }
 
-tasks.named("preBuild") { dependsOn(downloadVoskModel) }
+if (bundleModel) {
+    android.sourceSets.getByName("main").assets.srcDir(voskAssetsDir)
+    tasks.named("preBuild") { dependsOn(downloadVoskModel) }
+}

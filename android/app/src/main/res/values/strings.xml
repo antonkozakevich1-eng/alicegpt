@@ -9,6 +9,8 @@
     <string name="font_smaller">A−</string>
     <string name="font_bigger">A+</string>
     <string name="status_preparing_model">Подготовка модели распознавания (один раз)… %1$d%%</string>
+    <string name="status_downloading_model">Загрузка модели распознавания (один раз, ≈46 МБ, нужен интернет)… %1$d%%</string>
+    <string name="retry_model">Повторить загрузку</string>
     <string name="status_loading_text">Загрузка текста…</string>
     <string name="status_ready">Нажмите «Старт» и читайте вслух</string>
     <string name="status_starting">Запуск микрофона…</string>
