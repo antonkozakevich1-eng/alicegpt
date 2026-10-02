@@ -35,6 +35,7 @@
     <string name="file_empty">В файле не найден текст</string>
     <string name="file_error">Не удалось открыть файл: %1$s</string>
     <string name="file_opened">Открыто: %1$s</string>
+    <string name="error_no_internet">нет соединения с интернетом: модель нужно скачать один раз</string>
     <string name="permission_needed">Для распознавания речи нужен доступ к микрофону. Разрешите его в настройках приложения.</string>
     <string name="engine_fallback">Нейросеть не работает на этом телефоне (%1$s). Переключился на Vosk; сменить движок можно в настройках.</string>
 

@@ -242,7 +242,7 @@ class MainActivity : Activity(), SpeechEngine.Listener {
 
     private fun prepareModel() {
         val kind = engineKind
-        val store = ModelStore.of(kind)
+        val store = storeFactory(kind)
         if (store.isInstalled(this)) {
             modelReady = true
             modelProgress = -1f
@@ -256,14 +256,7 @@ class MainActivity : Activity(), SpeechEngine.Listener {
         refreshStatus()
         Thread {
             try {
-                store.install(this) { p ->
-                    ui.post {
-                        if (kind == engineKind) {
-                            modelProgress = p
-                            refreshStatus()
-                        }
-                    }
-                }
+                installWithRetries(store, kind)
                 ui.post {
                     if (kind != engineKind) return@post
                     modelReady = true
@@ -275,11 +268,39 @@ class MainActivity : Activity(), SpeechEngine.Listener {
                 ui.post {
                     if (kind != engineKind) return@post
                     modelProgress = -1f
-                    lastError = e.message ?: e.javaClass.simpleName
+                    lastError = friendlyError(e)
                     refreshStatus()
                 }
             }
         }.start()
+    }
+
+    /** Мобильная сеть обрывается: сетевые сбои повторяются несколько раз с растущей паузой (загрузка начинается заново). */
+    private fun installWithRetries(store: ModelStore, kind: EngineKind) {
+        var attempt = 1
+        while (true) {
+            try {
+                store.install(this) { p ->
+                    ui.post {
+                        if (kind == engineKind) {
+                            modelProgress = p
+                            refreshStatus()
+                        }
+                    }
+                }
+                return
+            } catch (e: java.io.IOException) {
+                if (attempt >= MODEL_ATTEMPTS) throw e
+                Thread.sleep(modelRetryDelayMs * attempt)
+                attempt++
+            }
+        }
+    }
+
+    private fun friendlyError(e: Throwable): String = when (e) {
+        is java.net.UnknownHostException, is java.net.ConnectException, is java.net.SocketTimeoutException ->
+            getString(R.string.error_no_internet)
+        else -> e.message ?: e.javaClass.simpleName
     }
 
     private fun changeEngine(kind: EngineKind) {
@@ -585,7 +606,7 @@ class MainActivity : Activity(), SpeechEngine.Listener {
         val context = if (settings.useContext && d != null) ContextWords.window(d, pos, engine.contextBack, engine.contextAhead) else null
         contextCenter = pos
         contextActive = context != null
-        engine.start(ModelStore.of(engineKind).modelDir(this), context)
+        engine.start(storeFactory(engineKind).modelDir(this), context)
         refreshStatus()
     }
 
@@ -722,7 +743,7 @@ class MainActivity : Activity(), SpeechEngine.Listener {
                 progress = modelProgress
                 val percent = (modelProgress * 100).toInt()
                 if (modelDownloading) {
-                    getString(R.string.status_downloading_model, ModelStore.of(engineKind).downloadMb, percent)
+                    getString(R.string.status_downloading_model, storeFactory(engineKind).downloadMb, percent)
                 } else {
                     getString(R.string.status_preparing_model, percent)
                 }
@@ -788,6 +809,15 @@ class MainActivity : Activity(), SpeechEngine.Listener {
             if (kind == EngineKind.NEURAL) NeuralEngine(listener) else VoskEngine(listener)
         }
 
+        /** Где лежит модель распознавания движка. Тесты подменяют, чтобы не распаковывать и не скачивать настоящую. */
+        @JvmStatic
+        var storeFactory: (EngineKind) -> ModelStore = { ModelStore.of(it) }
+
+        /** Пауза перед повторной попыткой загрузки модели: ×номер попытки (мс). Тесты её сокращают. */
+        @JvmStatic
+        var modelRetryDelayMs = 2000L
+
+        private const val MODEL_ATTEMPTS = 3
         private const val ASSET_TEXT = "odyssey_zhukovsky.txt"
         private const val CUSTOM_FILE = "custom.txt"
         private const val REQ_AUDIO = 1

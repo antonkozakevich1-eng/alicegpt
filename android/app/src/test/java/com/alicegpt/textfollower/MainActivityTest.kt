@@ -19,6 +19,7 @@ import android.widget.TextView
 import com.alicegpt.textfollower.speech.EngineKind
 import com.alicegpt.textfollower.speech.ModelStore
 import com.alicegpt.textfollower.testutil.FakeEngine
+import com.alicegpt.textfollower.testutil.FakeStore
 import com.alicegpt.textfollower.text.Doc
 import com.alicegpt.textfollower.text.TextLoader
 import com.alicegpt.textfollower.text.TextSearch
@@ -55,6 +56,8 @@ class MainActivityTest {
     private val book = File("src/main/assets/odyssey_zhukovsky.txt")
     private val doc: Doc by lazy { Doc.parse(TextLoader.load(book.readBytes())) }
     private val originalFactory = MainActivity.engineFactory
+    private val originalStoreFactory = MainActivity.storeFactory
+    private val originalRetryDelay = MainActivity.modelRetryDelayMs
     private val engines = ArrayList<FakeEngine>()
 
     /** Какие движки «не запускаются»: вид → текст ошибки. */
@@ -78,6 +81,8 @@ class MainActivityTest {
     @After
     fun restore() {
         MainActivity.engineFactory = originalFactory
+        MainActivity.storeFactory = originalStoreFactory
+        MainActivity.modelRetryDelayMs = originalRetryDelay
     }
 
     // ---------- помощники ----------
@@ -214,6 +219,99 @@ class MainActivityTest {
         assertTrue(Settings(app).seenIntro)
         assertFalse(dialog.isShowing)
         a.finish()
+    }
+
+    // ---------- первый запуск: подготовка модели ----------
+
+    /** Подставляет хранилище нейросети, которой «ещё нет»; остальные хранилища — обычные. */
+    private fun missingNeuralModel(
+        bundled: Boolean = true,
+        failures: List<Throwable> = emptyList(),
+        gate: java.util.concurrent.CountDownLatch? = null,
+    ): FakeStore {
+        val store = FakeStore(EngineKind.NEURAL, File(app.filesDir, "fake-model"), bundled = bundled, failures = failures.toMutableList(), gate = gate)
+        MainActivity.storeFactory = { kind -> if (kind == EngineKind.NEURAL) store else ModelStore.of(kind) }
+        MainActivity.modelRetryDelayMs = 5
+        return store
+    }
+
+    private fun waitFor(timeoutMs: Int = 10_000, cond: () -> Boolean) {
+        var waited = 0
+        while (!cond() && waited < timeoutMs) {
+            idle()
+            Thread.sleep(20)
+            waited += 20
+        }
+        idle()
+        assertTrue("условие не выполнилось за $timeoutMs мс", cond())
+    }
+
+    @Test
+    fun firstRunShowsModelPreparationAndThenListens() {
+        val gate = java.util.concurrent.CountDownLatch(1)
+        val store = missingNeuralModel(bundled = true, gate = gate)
+        val a = launch()
+        waitFor { status(a).startsWith("Подготовка модели") }
+        assertTrue(status(a), status(a).contains("40%"))
+        assertEquals(MicButton.State.BUSY, mic(a).state)
+        // пока модель готовится, нажатие на микрофон ничего не запускает
+        grantMic()
+        mic(a).performClick()
+        idle()
+        assertTrue(engines.none { it.starts > 0 })
+
+        gate.countDown()
+        waitFor { status(a) == a.getString(R.string.status_ready) }
+        assertEquals(MicButton.State.IDLE, mic(a).state)
+        mic(a).performClick()
+        idle()
+        assertEquals(1, engines.last().starts)
+        assertEquals(store.modelDir(app), engines.last().modelDir)
+    }
+
+    @Test
+    fun aDownloadedModelSaysHowBigItIs() {
+        val gate = java.util.concurrent.CountDownLatch(1)
+        missingNeuralModel(bundled = false, gate = gate)
+        val a = launch()
+        waitFor { status(a).startsWith("Загрузка модели") }
+        assertTrue(status(a), status(a).contains("28 МБ"))
+        gate.countDown()
+        waitFor { status(a) == a.getString(R.string.status_ready) }
+    }
+
+    @Test
+    fun aShakyConnectionIsRetried() {
+        val store = missingNeuralModel(bundled = false, failures = listOf(java.io.IOException("обрыв"), java.io.IOException("обрыв")))
+        val a = launch()
+        waitFor { status(a) == a.getString(R.string.status_ready) }
+        assertEquals(3, store.installCalls)
+    }
+
+    @Test
+    fun noInternetIsExplainedAndTappingTheMicrophoneTriesAgain() {
+        val store = missingNeuralModel(
+            bundled = false,
+            failures = listOf(java.net.UnknownHostException("x"), java.net.UnknownHostException("x"), java.net.UnknownHostException("x")),
+        )
+        val a = launch()
+        waitFor { status(a).startsWith("Ошибка") }
+        assertEquals("Ошибка: " + a.getString(R.string.error_no_internet), status(a))
+        assertEquals(MicButton.State.ERROR, mic(a).state)
+        assertEquals(3, store.installCalls)
+
+        // связь появилась — нажатие повторяет загрузку
+        mic(a).performClick()
+        waitFor { status(a) == a.getString(R.string.status_ready) }
+        assertEquals(4, store.installCalls)
+    }
+
+    @Test
+    fun anUnexpectedInstallFailureShowsItsMessage() {
+        missingNeuralModel(bundled = true, failures = listOf(IllegalStateException("нет места на диске")))
+        val a = launch()
+        waitFor { status(a).startsWith("Ошибка") }
+        assertEquals("Ошибка: нет места на диске", status(a))
     }
 
     // ---------- чтение ----------

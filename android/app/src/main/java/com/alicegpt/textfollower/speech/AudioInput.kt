@@ -45,11 +45,22 @@ class AudioInput : AudioSource {
         }
         record = r
         val session = r.audioSessionId
-        if (AutomaticGainControl.isAvailable()) AutomaticGainControl.create(session)?.let { it.enabled = true; effects += it }
-        if (NoiseSuppressor.isAvailable()) NoiseSuppressor.create(session)?.let { it.enabled = true; effects += it }
+        if (AutomaticGainControl.isAvailable()) addEffect(true) { AutomaticGainControl.create(session) }
+        if (NoiseSuppressor.isAvailable()) addEffect(true) { NoiseSuppressor.create(session) }
         // Эхоподавитель при чтении вслух не нужен и может «съедать» речь.
-        if (AcousticEchoCanceler.isAvailable()) AcousticEchoCanceler.create(session)?.let { it.enabled = false; effects += it }
+        if (AcousticEchoCanceler.isAvailable()) addEffect(false) { AcousticEchoCanceler.create(session) }
         r.startRecording()
+    }
+
+    /** Аппаратные эффекты — необязательное улучшение: на некоторых телефонах они падают, и это не должно ронять запись. */
+    private fun addEffect(enabled: Boolean, create: () -> AudioEffect?) {
+        try {
+            create()?.let {
+                it.enabled = enabled
+                effects += it
+            }
+        } catch (_: Throwable) {
+        }
     }
 
     override fun read(buf: ShortArray): Int {
