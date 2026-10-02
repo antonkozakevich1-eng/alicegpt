@@ -92,7 +92,7 @@ object NeuralModelStore : ModelStore {
     }
 
     /** Поток скачиваемого файла; соединение закрывается вместе с потоком. */
-    private fun openRemote(f: RemoteFile): InputStream {
+    internal fun openRemote(f: RemoteFile): InputStream {
         val conn = URL(f.url).openConnection() as HttpURLConnection
         conn.connectTimeout = 20_000
         conn.readTimeout = 30_000
